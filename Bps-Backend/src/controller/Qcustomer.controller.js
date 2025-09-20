@@ -47,11 +47,6 @@ export const createCustomer = asyncHandler(async (req, res) => {
     }
 
     // Check for existing email
-    const existingCustomer = await QCustomer.findOne({ emailId });
-    if (existingCustomer) {
-        return res.status(400).json({ message: "Email is already registered." });
-
-    }
 
     // Handle file uploads
     const idProofPhoto = req.files?.idProofPhoto?.[0]?.path || null;
@@ -84,7 +79,7 @@ export const createCustomer = asyncHandler(async (req, res) => {
 
 // GET All Customers
 export const getAllCustomers = asyncHandler(async (req, res) => {
-    const customers = await QCustomer.find(req.roleQueryFilter).lean();
+    const customers = await QCustomer.find().lean();
     const customerList = formatCustomerList(customers);
 
     return res.status(200).json(new ApiResponse(200, "Customers fetched successfully", customerList));
@@ -151,28 +146,28 @@ export const deleteCustomer = asyncHandler(async (req, res) => {
 
 // GET Total QCustomer Count
 export const getTotalCustomerCount = asyncHandler(async (req, res) => {
-    const totalCustomer = await QCustomer.countDocuments(req.roleQueryFilter);
+    const totalCustomer = await QCustomer.countDocuments();
 
     return res.status(200).json(new ApiResponse(200, "Total customer count fetched successfully", { totalCustomer }));
 });
 
 // GET Active QCustomer Count
 export const getActiveCustomerCount = asyncHandler(async (req, res) => {
-    const activeCount = await QCustomer.countDocuments({ ...req.roleQueryFilter, status: "active", isBlacklisted: { $ne: true }, });
+    const activeCount = await QCustomer.countDocuments({ status: "active", isBlacklisted: { $ne: true }, });
 
     return res.status(200).json(new ApiResponse(200, "Active customer count fetched successfully", { activeCount }));
 });
 
 // GET Blacklisted QCustomer Count
 export const getBlacklistedCustomerCount = asyncHandler(async (req, res) => {
-    const blacklistedCount = await QCustomer.countDocuments({ ...req.roleQueryFilter, isBlacklisted: true });
+    const blacklistedCount = await QCustomer.countDocuments({ isBlacklisted: true });
 
     return res.status(200).json(new ApiResponse(200, "Blacklisted customer count fetched successfully", { blacklistedCount }));
 });
 
 // GET Active Customers (List)
 export const getActiveCustomers = asyncHandler(async (req, res) => {
-    const activeCustomers = await QCustomer.find({ ...req.roleQueryFilter, status: "active", isBlacklisted: { $ne: true }, }).lean();
+    const activeCustomers = await QCustomer.find({ status: "active", isBlacklisted: { $ne: true }, }).lean();
     const customerList = formatCustomerList(activeCustomers);
 
     return res.status(200).json(new ApiResponse(200, "Active customers fetched successfully", customerList));
@@ -180,7 +175,7 @@ export const getActiveCustomers = asyncHandler(async (req, res) => {
 
 // GET Blacklisted (Blocked) Customers (List)
 export const getBlockedCustomers = asyncHandler(async (req, res) => {
-    const blockedCustomers = await QCustomer.find({ ...req.roleQueryFilter, isBlacklisted: true }).lean();
+    const blockedCustomers = await QCustomer.find({ isBlacklisted: true }).lean();
     const customerList = formatCustomerList(blockedCustomers);
 
     return res.status(200).json(new ApiResponse(200, "Blocked customers fetched successfully", customerList));

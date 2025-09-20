@@ -468,10 +468,10 @@ const BookingCard = () => {
                       <>
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.orderBy}</TableCell>
-                        <TableCell>{row.date}</TableCell>
-                        <TableCell>{row.fromName}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.date}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.fromName}</TableCell>
                         <TableCell>{row.pickup}</TableCell>
-                        <TableCell>{row.toName}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.toName}</TableCell>
                         <TableCell>{row.drop}</TableCell>
                         <TableCell>{row.contact}</TableCell>
                         <TableCell>

@@ -1,18 +1,19 @@
 // src/features/location/locationSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { API_BASE_URL } from '../../utils/api'
 
 export const fetchStates = createAsyncThunk('location/fetchStates', async () => {
-    const res = await axios.get('http://localhost:8000/api/v2/state/states');
-    
+    const res = await axios.get(`${API_BASE_URL}/state/states`);
+
     return res.data; // make sure response format matches
 });
 
 export const fetchCities = createAsyncThunk('location/fetchCities', async (stateName) => {
     const encodedState = encodeURIComponent(stateName);
-    const res = await axios.get(`http://localhost:8000/api/v2/state/cities/${encodedState}`);
-   
-    return res.data; 
+    const res = await axios.get(`${API_BASE_URL}/state/cities/${encodedState}`);
+
+    return res.data;
 });
 
 const locationSlice = createSlice({

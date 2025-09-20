@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { BOOKINGS_API } from '../../../utils/api'
 
 const TrackerCard = () => {
     const [customerName, setCustomerName] = useState("");
@@ -27,7 +28,7 @@ const TrackerCard = () => {
         setLoading(true);
 
         try {
-            const response = await fetch("http://localhost:8000/api/v2/bookings/invoice", {
+            const response = await fetch(`${BOOKINGS_API}/invoice`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

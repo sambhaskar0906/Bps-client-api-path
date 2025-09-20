@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-    Modal, Box, Typography, Divider, Button, Paper,
-    Grid
+    Modal, Box, Typography, Divider, Button, Grid, Paper, Table, TableHead,
+    TableBody, TableRow, TableCell
 } from '@mui/material';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 
@@ -10,227 +10,218 @@ const style = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: 500,
-    bgcolor: '#fff',
-    boxShadow: 24,
-    p: 3,
-    borderRadius: 3,
+    width: 800,
     maxHeight: '90vh',
+    bgcolor: '#fff',
+    boxShadow: 10,
+    p: 3,
+    borderRadius: 2,
     overflowY: 'auto',
+    fontFamily: "'Roboto', sans-serif",
 };
 
-const labelStyle = { color: '#666', fontWeight: 500 };
-const valueStyle = { color: '#222', fontWeight: 600, fontFamily: 'monospace' };
 const formatCurrency = (amount) => `₹${Number(amount || 0).toFixed(2)}`;
 const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleDateString() : 'N/A';
 
 const SlipModal = ({ open, handleClose, bookingData }) => {
+    const printRef = useRef(); // Reference for printing
+
     if (!bookingData) return null;
 
+    const addresses = [
+        { city: "H.O. DELHI", address: "332, Kucha Ghasi Ram, Chandni Chowk, Fatehpuri, Delhi -110006", phone: "011-23955385, 23830010" },
+        { city: "MUMBAI", address: "1, Malharrao Wadi, Gr. Fir. R. No. 4, D.A Lane Kalabadevi Rd. Mumbai-400002", phone: "022-22422812, 22411975" },
+        { city: "JAIPUR", address: "House No. 875, Pink House, Ganga Mata Ki Gali, Gopal Ji Ka Rasta, Jaipur", phone: "9672101700" },
+        { city: "KOLKATA", address: "33, Shiv Thakur Lane, Gr. Fir., Behind Hari Ram Goenka Street, Kolkata-700007", phone: "033-46041345" }
+    ];
+
     const handlePrint = () => {
-        const newWin = window.open('', '', 'width=800,height=600');
+        const printWindow = window.open('', '_blank', 'width=1000,height=800');
+        printWindow.document.write('<html><head><title>Print Slip</title>');
+        printWindow.document.write('<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />');
+        printWindow.document.write('<style>');
+        printWindow.document.write(`
+        body { font-family: Roboto, sans-serif; margin: 0; padding: 16px; -webkit-print-color-adjust: exact; }
 
-        const printHTML = `
-  <html>
-    <head>
-      <title>Print Receipt</title>
-      <style>
-        * { box-sizing: border-box; }
-        body {
-          font-family: Arial, sans-serif;
-          padding: 20px;
-          font-size: 12px;
-          color: #000;
+        /* Force Grid container and items to print as flex */
+        .MuiGrid-container {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            margin: 0 -8px !important;
         }
-        .print-container {
-          width: 100%;
-          max-width: 750px;
-          margin: auto;
+        .MuiGrid-size {
+            box-sizing: border-box !important;
+            padding: 0 8px !important;
+            flex: 0 0 50% !important; /* make md=6 => 50% width */
+            max-width: 50% !important;
         }
-        .section {
-          border: 1px solid #ccc;
-          padding: 10px;
-          margin-bottom: 10px;
-          border-radius: 4px;
-        }
-        .row {
-          display: flex;
-          margin-bottom: 4px;
-        }
-        .col-6 {
-          width: 50%;
-          padding: 2px 8px;
-        }
-        .label { color: #666; font-weight: 500; }
-        .value { color: #222; font-weight: 600; font-family: monospace; }
-        .footer {
-          text-align: center;
-          margin-top: 12px;
-          font-size: 10px;
-          color: #666;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="print-container">
-        <h2 style="text-align:center; color:#1976d2;">Bharat Parcel Services</h2>
-        <div style="text-align:center; font-size:11px;">
-          332, Kucha Ghasiram, Chandni Chowk, Fatehpuri, Delhi-6<br/>
-          Ph: 45138699, 9318407386<br/>
-          GST: 07AAFCB1234R1Z1 | PAN: AAFCB1234R
-        </div>
 
-        <div class="section">
-          <h4>Booking Details</h4>
-          ${[
-                ['Ref No', bookingData?.items?.[0]?.refNo || bookingData?.bookingId],
-                ['Receipt No', bookingData?.items?.[0]?.receiptNo || 'N/A'],
-                ['Date', formatDate(bookingData?.bookingDate)],
-                ['From', bookingData?.fromCity],
-                ['To', bookingData?.endStation?.stationName || bookingData?.toCity],
-                ['Sender', bookingData?.senderName || bookingData?.firstName],
-                ['Receiver', bookingData?.receiverName || bookingData?.items?.[0]?.toName || 'N/A'],
-                ['Contact', bookingData?.mobile],
-            ].map(([label, value]) => `
-            <div class="row">
-              <div class="col-6"><span class="label">${label}:</span></div>
-              <div class="col-6"><span class="value">${value}</span></div>
-            </div>`).join('')}
-        </div>
+        /* Table formatting */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            page-break-inside: avoid;
+        }
+        th, td {
+            border: 1px solid #bbb;
+            padding: 4px 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f5f5f5;
+            -webkit-print-color-adjust: exact;
+        }
+        tr {
+            page-break-inside: avoid;
+        }
 
-        <div class="section">
-          <h4>Payment Summary</h4>
-          ${[
-                ['Freight', formatCurrency(bookingData?.freight)],
-                ['Insurance/VPP', formatCurrency(bookingData?.ins_vpp)],
-                ['Topay', formatCurrency(bookingData?.items?.toPay)],
-                ['CGST (9%)', formatCurrency(bookingData?.cgst)],
-                ['SGST (9%)', formatCurrency(bookingData?.sgst)],
-                ['IGST (18%)', formatCurrency(bookingData?.igst)],
-                ['Total Amount', formatCurrency(bookingData?.grandTotal)],
-            ].map(([label, value]) => `
-            <div class="row">
-              <div class="col-6"><span class="label">${label}:</span></div>
-              <div class="col-6"><span class="value">${value}</span></div>
-            </div>`).join('')}
-        </div>
+        /* Header & footer centered */
+        .MuiBox-root {
+            text-align: center !important;
+        }
 
-        <div class="footer">
-          Thank you for choosing Bharat Parcel Services
-        </div>
-      </div>
-    </body>
-  </html>
-  `;
-
-        newWin.document.write(printHTML);
-        newWin.document.close();
-        newWin.onload = function () {
-            newWin.focus();
-            newWin.print();
-            newWin.close();
-        };
+        @media print {
+            body { zoom: 90%; }
+        }
+    `);
+        printWindow.document.write('</style>');
+        printWindow.document.write('</head><body>');
+        printWindow.document.write(printRef.current.innerHTML);
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
     };
-
-
-    const {
-        bookingId, bookingDate, fromCity, toCity, firstName, mobile,
-        freight, ins_vpp, cgst, sgst, igst, grandTotal, items, endStation,
-        senderName, receiverName, contact
-    } = bookingData;
 
     return (
         <Modal open={open} onClose={handleClose}>
             <Box sx={style}>
-                <div id="print-section">
-                    {/* Header */}
-                    <Box textAlign="center" mb={2}>
-                        <Typography variant="h5" fontWeight="bold" color="primary">Bharat Parcel Services</Typography>
-                        <Typography variant="subtitle2" color="text.secondary">
-                            {bookingData.startStation.address}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                            Ph: {bookingData.startStation.contact}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            GST: {bookingData.startStation.gst} | PAN: AAFCB1234R
-                        </Typography>
-                    </Box>
-
-                    {/* Booking Details with Grid */}
-                    <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
-                            Booking Details
-                        </Typography>
-                        <Grid container spacing={1}>
-                            {[
-                                ['Ref No', items?.[0]?.refNo || bookingId],
-                                ['Receipt No', items?.[0]?.receiptNo || 'N/A'],
-                                ['Date', formatDate(bookingDate)],
-                                ['From', fromCity],
-                                ['To', endStation?.stationName || toCity],
-                                ['Sender', senderName || firstName],
-                                ['Receiver', receiverName || items?.[0]?.toName || 'N/A'],
-                                ['Contact', mobile],
-                            ].map(([label, value], i) => (
-                                <React.Fragment key={i}>
-                                    <Grid size={{ xs: 6 }}><Typography sx={labelStyle}>{label}:</Typography></Grid>
-                                    <Grid size={{ xs: 6 }}><Typography sx={valueStyle}>{value}</Typography></Grid>
-                                </React.Fragment>
-                            ))}
-                        </Grid>
-                    </Paper>
-
-                    {/* Payment Summary with Grid */}
-                    <Paper elevation={2} sx={{ p: 2, mb: 2 }}>
-                        <Typography variant="subtitle2" gutterBottom color="primary" fontWeight="bold">
-                            Payment Summary
-                        </Typography>
-                        <Grid container spacing={1}>
-                            {[
-                                ['Freight', formatCurrency(freight)],
-                                ['Insurance/VPP', formatCurrency(ins_vpp)],
-                                ['Topay', (bookingData?.items?.[0]?.toPay)],
-                                ['CGST (9%)', formatCurrency(cgst)],
-                                ['SGST (9%)', formatCurrency(sgst)],
-                                ['IGST (18%)', formatCurrency(igst)],
-                            ].map(([label, value], i) => (
-                                <React.Fragment key={i}>
-                                    <Grid size={{ xs: 6 }}><Typography sx={labelStyle}>{label}:</Typography></Grid>
-                                    <Grid size={{ xs: 6 }}><Typography sx={valueStyle}>{value}</Typography></Grid>
-                                </React.Fragment>
-                            ))}
-                        </Grid>
-
-                        <Divider sx={{ my: 1.5 }} />
-                        <Box display="flex" justifyContent="space-between">
-                            <Typography variant="body1" fontWeight="bold">Total Amount:</Typography>
-                            <Typography variant="body1" fontWeight="bold" color="primary">
-                                {formatCurrency(grandTotal)}
+                {/* Modal content */}
+                <Box ref={printRef} id="print-section">
+                    <Paper elevation={0} sx={{ p: 2, border: "1px solid #ccc" }}>
+                        {/* Header */}
+                        <Box textAlign="center" mb={2}>
+                            <Typography variant="h5" fontWeight="bold" color="black">BHARAT PARCEL SERVICES PVT. LTD.</Typography>
+                            <Typography variant="caption" display="block" color="text.secondary">SUBJECT TO DELHI JURISDICTION</Typography>
+                            <Typography variant="body2" fontWeight="bold" mt={1}>
+                                GSTIN: 07AAECB6506F1ZY | PAN: AAECB6506F
                             </Typography>
                         </Box>
-                    </Paper>
 
-                    {/* Footer */}
-                    <Typography variant="caption" textAlign="center" display="block" color="text.secondary" mt={1}>
-                        Thank you for choosing Bharat Parcel Services
-                    </Typography>
-                </div>
+                        {/* Station Addresses */}
+                        <Grid container spacing={2} mb={2}>
+                            {addresses.map((item, idx) => (
+                                <Grid size={{ xs: 12, md: 6 }} key={idx}> {/* KEEP AS-IS */}
+                                    <Paper sx={{ p: 1.2, border: "1px dashed #aaa", bgcolor: "#fafafa" }}>
+                                        <Typography variant="subtitle2" fontWeight="bold">{item.city}</Typography>
+                                        <Typography variant="body2">{item.address}</Typography>
+                                        <Typography variant="body2">📞 {item.phone}</Typography>
+                                    </Paper>
+                                </Grid>
+                            ))}
+                        </Grid>
+
+                        <Divider sx={{ my: 1 }} />
+
+                        {/* Sender & Receiver */}
+                        <Grid container spacing={2} mb={2}>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                                <Paper variant="outlined" sx={{ p: 2, bgcolor: "#f9f9f9" }}>
+                                    <Typography variant="subtitle2" fontWeight="bold">Sender</Typography>
+                                    <Typography variant="body2">{bookingData?.senderName || bookingData?.firstName}</Typography>
+                                    <Typography variant="body2">GSTIN: {bookingData?.senderGgt || 'N/A'}</Typography>
+                                    <Typography variant="body2">{bookingData?.fromCity}, {bookingData?.fromState} - {bookingData?.senderPincode}</Typography>
+                                </Paper>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 6 }}>
+                                <Paper variant="outlined" sx={{ p: 2, bgcolor: "#f9f9f9" }}>
+                                    <Typography variant="subtitle2" fontWeight="bold">Receiver</Typography>
+                                    <Typography variant="body2">{bookingData?.receiverName}</Typography>
+                                    <Typography variant="body2">GSTIN: {bookingData?.receiverGgt || 'N/A'}</Typography>
+                                    <Typography variant="body2">{bookingData?.toCity}, {bookingData?.toState} - {bookingData?.toPincode}</Typography>
+                                </Paper>
+                            </Grid>
+                        </Grid>
+
+                        {/* Booking Details */}
+                        <Grid container spacing={1} mb={2}>
+                            <Grid size={{ xs: 12, md: 12 }}>
+                                <Typography variant="body2"><strong>Booking ID:</strong> {bookingData?.bookingId}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>Receipt No:</strong> {bookingData?.items?.[0]?.receiptNo}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>Ref No:</strong> {bookingData?.items?.[0]?.refNo}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>Booking Date:</strong> {formatDate(bookingData?.bookingDate)}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>Delivery Date:</strong> {formatDate(bookingData?.deliveryDate)}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>From Station:</strong> {bookingData?.startStation?.stationName}</Typography>
+                            </Grid>
+                            <Grid size={{ xs: 12, md: 4 }}>
+                                <Typography variant="body2"><strong>To Station:</strong> {bookingData?.endStation?.stationName}</Typography>
+                            </Grid>
+                        </Grid>
+
+                        {/* Items Table */}
+                        <Table size="small" sx={{ mb: 2, border: '1px solid #bbb' }}>
+                            <TableHead sx={{ bgcolor: "#f5f5f5" }}>
+                                <TableRow>
+                                    {["No.", "Insurance", "VPP Amount", "To Pay/Paid", "Weight (Kgs)", "Amount"].map((head, idx) => (
+                                        <TableCell key={idx} align="center" sx={{ border: '1px solid #bbb', fontWeight: 'bold' }}>{head}</TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {bookingData.items.map((item, idx) => (
+                                    <TableRow key={item._id} sx={{ bgcolor: idx % 2 === 0 ? "#fff" : "#f9f9f9" }}>
+                                        <TableCell align="center">{idx + 1}</TableCell>
+                                        <TableCell align="center">{formatCurrency(item.insurance)}</TableCell>
+                                        <TableCell align="center">{formatCurrency(item.vppAmount)}</TableCell>
+                                        <TableCell align="center">{item.toPay || "To Pay"}</TableCell>
+                                        <TableCell align="center">{item.weight}</TableCell>
+                                        <TableCell align="center">{formatCurrency(item.amount)}</TableCell>
+                                    </TableRow>
+                                ))}
+                                <TableRow>
+                                    <TableCell colSpan={5} align="right" sx={{ fontWeight: 'bold', border: '1px solid #bbb' }}>TOTAL</TableCell>
+                                    <TableCell sx={{ border: '1px solid #bbb', fontWeight: 'bold' }}>{formatCurrency(bookingData?.grandTotal)}</TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
+
+                        {/* Footer */}
+                        <Box textAlign="center" mt={2}>
+                            <Typography variant="caption" display="block">Record For One Month Only.</Typography>
+                            <Typography variant="caption" display="block" mt={1}>Sign. __________________</Typography>
+                        </Box>
+                    </Paper>
+                </Box>
 
                 {/* Print Button */}
-                <Box mt={2} display="flex" justifyContent="center">
+                <Box display="flex" justifyContent="center" mt={2}>
                     <Button
                         variant="contained"
-                        color="primary"
                         startIcon={<ReceiptIcon />}
-                        sx={{ borderRadius: 2, px: 4, textTransform: 'none' }}
+                        sx={{
+                            borderRadius: 2,
+                            px: 4,
+                            textTransform: 'none',
+                            bgcolor: "#1976d2",
+                            "&:hover": { bgcolor: "#145ca4" }
+                        }}
                         onClick={handlePrint}
                     >
-                        Print Receipt
+                        Print Slip
                     </Button>
                 </Box>
             </Box>
-
         </Modal>
     );
 };

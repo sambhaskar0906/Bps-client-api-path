@@ -481,30 +481,57 @@ export const updateBooking = async (req, res) => {
   }
 };
 
-
-
-
 export const deleteBooking = async (req, res) => {
   try {
     const { id } = req.params;
+    const booking = await Booking.findOneAndUpdate(
+      { bookingId: id },
+      { isDeleted: true, deletedAt: new Date() },
+      { new: true }
+    );
 
-    const deletedBooking = await Booking.findOneAndDelete({ bookingId: id });
 
-    if (!deletedBooking) {
-      return res.status(404).json({ message: "Booking not found" });
-    }
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+
 
     res.status(200).json({
-      message: "Booking permanently deleted",
-      deletedBooking,
+      message: "Booking moved to bin. It will be permanently deleted after 30 days.",
+      booking,
     });
   } catch (err) {
-    console.error("Error deleting booking:", err);
     res.status(500).json({ message: err.message });
   }
 };
 
 
+export const restoreBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await Booking.findOneAndUpdate(
+      { bookingId: id, isDeleted: true },
+      { isDeleted: false, deletedAt: null },
+      { new: true }
+    );
+
+
+    if (!booking) return res.status(404).json({ message: "Booking not found in bin" });
+
+
+    res.status(200).json({ message: "Booking restored successfully", booking });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+
+export const listDeletedBookings = async (req, res) => {
+  try {
+    const deletedBookings = await Booking.find({ isDeleted: true });
+    res.status(200).json({ count: deletedBookings.length, bookings: deletedBookings });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 
 export const getBookingStatusList = async (req, res) => {
   try {
@@ -520,6 +547,7 @@ export const getBookingStatusList = async (req, res) => {
       filter = {
         activeDelivery: false,
         isDelivered: { $ne: true },
+        isDeleted: { $ne: true },
         totalCancelled: 0,
         $or: [
           { createdByRole: { $in: ['admin', 'supervisor'] } }, // Always include bookings created by admin/supervisor

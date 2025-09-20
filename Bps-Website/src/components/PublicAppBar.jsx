@@ -73,7 +73,7 @@ const PublicAppBar = () => {
                 md: "50px",
               },
               py: 0.5,
-              px: { xs: 1, sm: 2, md: 3 },
+              px: { xs: 2, sm: 4, md: 8, lg: 12 },
               backgroundColor: "transparent",
               boxShadow: showHeader
                 ? "0 2px 6px rgba(34, 95, 208, 0.15)"

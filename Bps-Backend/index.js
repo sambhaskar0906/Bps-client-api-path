@@ -4,6 +4,11 @@ import { app } from "./app.js"
 dotenv.config({
     path: './env'
 })
+
+app.get('/', (req, res) => {
+    res.send('Welcome to the Bharat Parcel Api LIve!');
+});
+
 connectDB()
     .then(() => {
         app.listen(process.env.PORT || 3000, () => {

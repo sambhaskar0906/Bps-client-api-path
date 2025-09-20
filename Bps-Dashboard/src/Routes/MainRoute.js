@@ -51,6 +51,7 @@ import QcustomerView from '../Pages/Admin/Qcustomer/Form/QcustomerView';
 import QcustomerUpdate from '../Pages/Admin/Qcustomer/Form/QcustomerUpdate';
 import LedgerResults from '../Pages/Admin/LedgerHistory/LedgerResults';
 import ViewQuotationBtDate from '../Components/ViewQuotationByDate';
+import Bin from '../Pages/Admin/Bin/Bin';
 
 
 const MainRoute = () => {
@@ -167,6 +168,8 @@ const MainRoute = () => {
                 {/* Report */}
                 <Route path="/booking-report" element={<BookingReport />} />
 
+                {/* Bin */}
+                <Route path="/bin" element={<Bin />} />
 
                 {/* Users (Admin Only) */}
                 {role !== 'supervisor' && (

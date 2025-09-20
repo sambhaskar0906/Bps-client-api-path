@@ -15,8 +15,9 @@ import ContentSection from "./ContentSection";
 import WelcomeSection from "../home/WelcomeSection";
 import LandingPage2 from "./LandingPage2";
 import ServicesPage from "../About/ServicesPage";
-import  Global  from "../About/Global";
+import Global from "../About/Global";
 import Readyto from "../Designe/Readyto";
+import Ourmission from "./Ourmission";
 
 const menuItems = ["Company Overview", "Careers", "Company History"];
 
@@ -24,14 +25,12 @@ const About = () => {
   return (
 
     <>
-    
-    <LandingPage2/>
-    <ServicesPage/>
-    <Global/>
-    <Readyto/>
-  
-    
 
+      <LandingPage2 />
+      <Ourmission />
+      {/* <ServicesPage /> */}
+      {/* <Global />
+      <Readyto /> */}
     </>
   );
 };

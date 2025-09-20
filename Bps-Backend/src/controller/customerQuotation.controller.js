@@ -178,7 +178,6 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
   };
 
   await quotation.save();
-  await sendBookingEmail(customer.emailId, quotation);
 
   res.status(201).json(new ApiResponse(201, formattedQuotation, "Quotation created successfully"));
 });

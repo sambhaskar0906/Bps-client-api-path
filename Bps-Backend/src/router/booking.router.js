@@ -25,7 +25,9 @@ import {
   generateInvoiceByCustomer,
   getAllCustomersPendingAmounts,
   receiveCustomerPayment,
-  getInvoicesByFilter
+  getInvoicesByFilter,
+  listDeletedBookings,
+  restoreBooking
 } from '../controller/booking.controller.js';
 
 import { parseFormData } from "../middleware/multerParser.middleware.js";
@@ -55,6 +57,8 @@ router.patch('/:bookingId/cancel', cancelBooking);
 router.get('/:id', viewBooking);           // View by bookingId (not _id!)
 router.put('/:id', updateBooking);         // Update by bookingId
 router.delete('/:id', deleteBooking);      // Delete by bookingId
+router.patch("/:id/restore", restoreBooking); // Restore
+router.get("/bin/list", listDeletedBookings); // Get bin list
 router.post('/overallBookingSummary', overallBookingSummary);
 router.post('/booking-summary', verifyJwt, getBookingSummaryByDate);
 router.post('/ca-report', getCADetailsSummary);

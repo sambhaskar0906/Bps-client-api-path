@@ -38,9 +38,9 @@ app.use("/api/v2/stations", manageStation);
 import driverRouter from "./src/router/driver.route.js"
 app.use("/api/v2/driver", verifyJwt, roleAccessFilter, driverRouter);
 import CustomerRouter from "./src/router/customer.route.js"
-app.use("/api/v2/customers", verifyJwt, roleAccessFilter, CustomerRouter);
+app.use("/api/v2/customers", verifyJwt, CustomerRouter);
 import QCustomerRouter from "./src/router/Qcustomer.router.js"
-app.use("/api/v2/qcustomers", verifyJwt, roleAccessFilter, QCustomerRouter);
+app.use("/api/v2/qcustomers", verifyJwt, QCustomerRouter);
 import userRouter from "./src/router/user.route.js"
 app.use("/api/v2/users", userRouter)
 import vehicleRouter from "./src/router/vehicle.router.js"

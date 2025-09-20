@@ -48,7 +48,7 @@ const Footer = () => {
           <Typography
             variant="body2"
             sx={{
-            
+
               textAlign: "justify",
               fontSize: { xs: "0.85rem", sm: "0.95rem" },
             }}
@@ -56,13 +56,6 @@ const Footer = () => {
             Bharat Parcel Services – Your parcel's whereabouts at your
             fingertips, delivering peace of mind.
           </Typography>
-          <Box
-            component="img"
-            src="https://dtlogistics.wpenginepowered.com/wp-content/uploads/2017/03/sign-light.png"
-            alt="CEO Signature"
-            sx={{ mt: 3, maxWidth: { xs: 140, sm: 180 } }}
-            loading="lazy"
-          />
         </Grid>
 
         {/* Quick Links */}
@@ -157,7 +150,7 @@ const Footer = () => {
                 borderRadius: 1,
                 input: { color: "#000", fontSize: "1rem" },
                 flex: 1,
-                
+
               }}
             />
             <Button
@@ -190,83 +183,9 @@ const Footer = () => {
             color="inherit"
             underline="hover"
           >
-            DesignThemes
+            Spirale infosoft
           </Link>
         </Typography>
-        {/* <Box
-          component="ul"
-          sx={{
-            listStyle: "none",
-            p: 0,
-            m: 0,
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            textAlign: "center",
-            gap: 1,
-          }}
-        >
-          {[
-            "Terms of Use",
-            "Legal Disclaimer",
-            "Privacy Policy",
-            "Support",
-            "Sitemap",
-          ].map((item) => (
-            <ListItem
-              key={item}
-              sx={{
-                display: "inline",
-                alignItems: "center",
-                justifyContent: "center",
-
-                fontSize: { xs: "0.75rem", sm: "0.875rem" },
-              }}
-            >
-              <Link href="#" color="inherit" underline="hover">
-                {item}
-              </Link>
-            </ListItem>
-          ))}
-        </Box> */}
-        <Box
-          component="ul"
-          sx={{
-            listStyle: "none",
-            p: 0,
-            m: 0,
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            gap: 2, // optional: space between items
-          }}
-        >
-          {[
-            "Terms of Use",
-            "Legal Disclaimer",
-            "Privacy Policy",
-            "Support",
-            "Sitemap",
-          ].map((item) => (
-            <ListItem
-              key={item}
-              sx={{
-                width: "auto", // ensures it doesn't stretch
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                p: 0,
-                fontSize: { xs: "0.75rem", sm: "0.875rem" },
-              }}
-            >
-              <Link href="#" color="inherit" underline="hover">
-                {item}
-              </Link>
-            </ListItem>
-          ))}
-        </Box>
       </Box>
     </Box>
   );

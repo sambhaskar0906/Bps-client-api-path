@@ -25,6 +25,7 @@ function TopBar({ scrolling }) {
         transition: "all 0.1s ease-in-out",
         boxShadow: "none",
         minHeight: "36px",
+        px: { xs: 2, sm: 4, md: 8, lg: 12 },
       }}
     >
       <Box
@@ -83,7 +84,7 @@ function TopBar({ scrolling }) {
           {/* Phone Info */}
           <Box
             sx={{
-              display: { md: "flex",xs: "flex",  },
+              display: { md: "flex", xs: "flex", },
               alignItems: "center",
               gap: 1,
             }}
@@ -93,11 +94,11 @@ function TopBar({ scrolling }) {
             </IconButton>
 
             <Box
-              sx={{ lineHeight: 1, display: "flex", flexDirection: {sx:"row", md:"column"} }}
+              sx={{ lineHeight: 1, display: "flex", flexDirection: { sx: "row", md: "column" } }}
             >
               <Typography
                 variant="caption"
-                sx={{ display:{xs:"none" ,  md: "block" }, color: "black", fontWeight: 600, fontSize: "0.7rem" }}
+                sx={{ display: { xs: "none", md: "block" }, color: "black", fontWeight: 600, fontSize: "0.7rem" }}
               >
                 CALL US NOW
               </Typography>

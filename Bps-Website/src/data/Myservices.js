@@ -92,21 +92,21 @@ export const Myservices1 = [
     title: "AIR FREIGHT",
     imgpath: S8,
     desc: "We offer a comprehensive range of air air-freight forwarding services that has a good from all major airports.",
-    imgInside:SI,
-    descInsideId2:"Permanent staffing is at the core of the business strategy of every company today. Organizations that are equipped with quality and dedicated permanent staff , their human capital have a competitive advantage and greater chance of surviving and succeeding in the long run. Spirale HR Solutions Pvt. Ltd. adopts a methodical process in providing Permanent staffing solutions .The methods deployed for Permanent staffing at Spirale HR Solutions Pvt. Ltd. include-"
+    imgInside: SI,
+    descInsideId2: "Permanent staffing is at the core of the business strategy of every company today. Organizations that are equipped with quality and dedicated permanent staff , their human capital have a competitive advantage and greater chance of surviving and succeeding in the long run. Spirale HR Solutions Pvt. Ltd. adopts a methodical process in providing Permanent staffing solutions .The methods deployed for Permanent staffing at Spirale HR Solutions Pvt. Ltd. include-"
   },
-  {
-    id: 3,
-    title: "OCEAN FREIGHT",
-    imgpath: S9,
-    desc: "We offer a comprehensive range of air air-freight forwarding services that has a good from all major airports. We have dedicated management team",
-  },
+  // {
+  //   id: 3,
+  //   title: "OCEAN FREIGHT",
+  //   imgpath: S9,
+  //   desc: "We offer a comprehensive range of air air-freight forwarding services that has a good from all major airports. We have dedicated management team",
+  // },
   {
     id: 4,
     title: "RAILWAY FREIGHT",
     imgpath: R1,
-    desc:"Railway freight offers reliable, eco-friendly transport for long-distance goods with timely delivery.",
+    desc: "Railway freight offers reliable, eco-friendly transport for long-distance goods with timely delivery.",
 
   },
-  
+
 ];

@@ -16,7 +16,7 @@
 //     <Box
 //       sx={{
 //         py: 8,
-        
+
 //         backgroundColor: "#f8f9fa",
 //         textAlign: "center",
 //       }}
@@ -58,7 +58,7 @@
 //                   height: 56,
 //                   fontSize: "1.5rem",
 //                   fontWeight: 700,
-                  
+
 //                 }}
 //               >
 //                 1
@@ -159,16 +159,15 @@ const WarehouseSection = () => {
           gutterBottom
           sx={{
             fontWeight: 700,
-            mb: { xs: 2 , md: 3 },
+            mb: { xs: 2, md: 3 },
             fontSize: {
               xs: "1.8rem",
               sm: "2.4rem",
-              md: "3rem",
-              lg: "3.4rem",
+              md: "2.5rem",
             },
           }}
         >
-          Deliver the Goods on time.
+          Delivering Your Courier & Parcels On Time, Every Time
         </Typography>
 
         <Typography
@@ -179,7 +178,7 @@ const WarehouseSection = () => {
             fontSize: { xs: "1rem", sm: "1.1rem", md: "1.25rem" },
           }}
         >
-          Over 100+ acre interior warehouse space
+          With a strong logistics network and advanced facilities, Bharat Parcel ensures timely and secure deliveries across India.
         </Typography>
 
         <Divider
@@ -216,17 +215,17 @@ const WarehouseSection = () => {
             {
               number: "1",
               title: "Solutions",
-              description: "Custom logistics solutions tailored to your needs",
+              description: "Tailored courier and parcel services for individuals and businesses.",
             },
             {
               number: "2",
               title: "Explore",
-              description: "Discover our global network and capabilities",
+              description: "Wide delivery network covering 200+ cities in India.",
             },
             {
               number: "3",
               title: "Get Started",
-              description: "Begin your logistics journey with us today",
+              description: "Book your shipment online and track it in real-time.",
             },
           ].map((item) => (
             <Grid item xs={12} sm={6} md={4} key={item.number}>

@@ -18,6 +18,7 @@ import TrackingPage from "../home/TrackingPage ";
 import Card from "./Card";
 import Readyto from "../Designe/Readyto";
 import { Container } from "@mui/material";
+import Faq from "../../components/Faq";
 
 function Home() {
   return (
@@ -42,6 +43,7 @@ function Home() {
       <Card />
       <WarehouseSection />
       <TrackingPage />
+      <Faq />
 
       {/* <MostVisit/> */}
 

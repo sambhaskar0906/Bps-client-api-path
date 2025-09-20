@@ -14,6 +14,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 
 export const sidebarItems = [
     { label: 'Dashboard', route: '/', icon: <DashboardIcon /> },
@@ -33,6 +34,7 @@ export const sidebarItems = [
     { label: 'Contact', route: '/contact', icon: <ContactPageIcon /> },
     { label: 'Booking Report', route: '/booking-report', icon: <BookOnlineIcon /> },
     { label: 'Pending List', route: '/pandding-list', icon: <AccountBalanceIcon /> },
+    { label: 'Bin', route: '/bin', icon: <DeleteForeverIcon /> }
     // { label: 'Cashbook', route: '/cashbook', icon: <MenuBookIcon /> },
     // { label: 'Manage Staff', route: '/staff', icon: <PeopleAltIcon /> },
 ];

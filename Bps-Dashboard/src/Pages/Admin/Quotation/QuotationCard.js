@@ -391,10 +391,10 @@ const QuotationCard = () => {
 
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.orderBy}</TableCell>
-                        <TableCell>{row.Date}</TableCell>
-                        <TableCell>{row.Name}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.Date}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.Name}</TableCell>
                         <TableCell>{row.pickup}</TableCell>
-                        <TableCell>{row["Name (Drop)"]}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row["Name (Drop)"]}</TableCell>
                         <TableCell>{row.drop}</TableCell>
                         <TableCell>{row.Contact}</TableCell>
                         <TableCell>
