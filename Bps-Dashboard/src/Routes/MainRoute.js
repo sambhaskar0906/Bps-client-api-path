@@ -163,7 +163,7 @@ const MainRoute = () => {
                 <Route path="/quotation-summary/:fromDate/:toDate" element={<ViewQuotationBtDate />} />
 
                 {/* Pandding List */}
-                <Route path="/pandding-list" element={<PanddingList />} />
+                <Route path="/pending-list" element={<PanddingList />} />
 
                 {/* Report */}
                 <Route path="/booking-report" element={<BookingReport />} />
