@@ -73,7 +73,7 @@ const MainRoute = () => {
     // Handle token expiration and logout
     useEffect(() => {
         if (!isAuthenticated) {
-            window.location.href = "http://localhost:3000";
+            window.location.href = "https://admin.bharatparcel.org";
         } else {
             const expirationTime = getTokenExpiration(token);
             const currentTime = Date.now();
@@ -95,7 +95,7 @@ const MainRoute = () => {
         localStorage.removeItem("authToken");
         localStorage.removeItem("userRole");
         alert("Session expired. You have been logged out.");
-        window.location.href = "http://localhost:5173/login";
+        window.location.href = "https://bharatparcel.org/login";
     };
 
     if (!isAuthenticated) {

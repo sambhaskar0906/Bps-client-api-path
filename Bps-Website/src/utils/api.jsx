@@ -1,9 +1,9 @@
 
 
 // Global API Base URL
-export const API_BASE_URL = 'http://localhost:8000/api/v2';   //https://api.bharatparcel.org/api/v2
+export const API_BASE_URL = 'https://api.bharatparcel.org/api/v2';   //https://api.bharatparcel.org/api/v2
 
-export const FRONTEND_BASE_URL = 'http://localhost:3000';    // https://admin.bharatparcel.org
+export const FRONTEND_BASE_URL = 'https://admin.bharatparcel.org';    // https://admin.bharatparcel.org
 
 // Specific modules ke liye alag BASE_URL banake export kar do
 export const BOOKINGS_API = `${API_BASE_URL}/bookings`;
