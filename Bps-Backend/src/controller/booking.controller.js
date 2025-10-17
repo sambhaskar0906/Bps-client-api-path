@@ -117,7 +117,6 @@ export const viewBooking = async (req, res) => {
   }
 };
 
-
 export const createBooking = async (req, res) => {
 
   try {
@@ -451,9 +450,6 @@ export const sendBookingEmailById = async (req, res) => {
   }
 };
 
-
-
-
 export const updateBooking = async (req, res) => {
 
   try {
@@ -480,56 +476,60 @@ export const updateBooking = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
-
 export const deleteBooking = async (req, res) => {
   try {
-    const { id } = req.params;
-    const booking = await Booking.findOneAndUpdate(
-      { bookingId: id },
-      { isDeleted: true, deletedAt: new Date() },
-      { new: true }
-    );
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
 
+    // Only soft delete
+    booking.isDeleted = true;
+    booking.deletedAt = new Date();
+    await booking.save();
 
-    if (!booking) return res.status(404).json({ message: "Booking not found" });
-
-
-    res.status(200).json({
-      message: "Booking moved to bin. It will be permanently deleted after 30 days.",
-      booking,
+    res.json({
+      success: true,
+      message: "Booking moved to recycle bin (can be restored later)",
+      data: booking
     });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
+export const getDeletedBookings = async (req, res) => {
+  try {
+    const deletedBookings = await Booking.find({ isDeleted: true });
+    res.json({
+      success: true,
+      message: "Deleted bookings fetched successfully",
+      data: deletedBookings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 export const restoreBooking = async (req, res) => {
   try {
-    const { id } = req.params;
-    const booking = await Booking.findOneAndUpdate(
-      { bookingId: id, isDeleted: true },
-      { isDeleted: false, deletedAt: null },
-      { new: true }
-    );
+    const booking = await Booking.findById(req.params.id);
 
+    if (!booking || !booking.isDeleted) {
+      return res.status(404).json({ success: false, message: "Booking not found in recycle bin" });
+    }
 
-    if (!booking) return res.status(404).json({ message: "Booking not found in bin" });
+    booking.isDeleted = false;
+    booking.deletedAt = null;
+    await booking.save();
 
-
-    res.status(200).json({ message: "Booking restored successfully", booking });
+    res.json({
+      success: true,
+      message: "Booking restored successfully",
+      data: booking
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-
-export const listDeletedBookings = async (req, res) => {
-  try {
-    const deletedBookings = await Booking.find({ isDeleted: true });
-    res.status(200).json({ count: deletedBookings.length, bookings: deletedBookings });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -547,7 +547,6 @@ export const getBookingStatusList = async (req, res) => {
       filter = {
         activeDelivery: false,
         isDelivered: { $ne: true },
-        isDeleted: { $ne: true },
         totalCancelled: 0,
         $or: [
           { createdByRole: { $in: ['admin', 'supervisor'] } }, // Always include bookings created by admin/supervisor
@@ -566,19 +565,19 @@ export const getBookingStatusList = async (req, res) => {
         ]
       };
     }
-
     const bookings = await Booking.find(filter)
-
-      .select('bookingId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
       .populate('startStation endStation', 'stationName')
       .populate('createdByRole', ' role')
       .lean();
+
 
     // Filter out bookings with missing station references
     const validBookings = bookings.filter(b => b.startStation && b.endStation);
 
     const data = validBookings.map((b, i) => ({
       SNo: i + 1,
+      orderId: b.orderId || 'N/A',
       orderBy:
         b.requestedByRole === 'public'
           ? 'Third Party'
@@ -659,23 +658,13 @@ export const rejectThirdPartyBookingRequest = async (req, res) => {
   try {
     const { bookingId } = req.params;
     const user = req.user;
-
-
-
-
-
     const booking = await Booking.findOne({ bookingId });
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
-
-
     if (booking.isApproved) {
       return res.status(400).json({ message: "Booking already approved, cannot reject" });
     }
-
-
-
     await Booking.deleteOne({ bookingId });
     res.status(200).json({ message: "Booking rejected successfully", booking });
   } catch (err) {
@@ -683,7 +672,6 @@ export const rejectThirdPartyBookingRequest = async (req, res) => {
     res.status(500).json({ message: err.message || "Server error" });
   }
 };
-
 
 // PATCH /api/v2/bookings/:bookingId/cancel
 export const cancelBooking = async (req, res) => {
@@ -715,8 +703,6 @@ const getRevenueBookingFilter = (type, user) => {
   return { ...base, isDelivered: true };
 };
 
-
-
 export const getBookingRevenueList = async (req, res) => {
   try {
     const user = req.user;
@@ -746,7 +732,6 @@ export const getBookingRevenueList = async (req, res) => {
           delete: `/bookings/delete/${b.bookingId}`
         }
       }));
-
     res.json({
       totalRevenue: totalRevenue.toFixed(2),
       count: data.length,
@@ -757,8 +742,6 @@ export const getBookingRevenueList = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
-
 
 // GET /api/v2/bookings/count/requests
 export const getBookingRequestsCount = async (req, res) => {
@@ -814,7 +797,6 @@ export const getTotalRevenue = async (req, res) => {
   }
 };
 
-
 // PATCH /api/v2/bookings/:id/activate
 export const activateBooking = async (req, res) => {
   try {
@@ -829,7 +811,6 @@ export const activateBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
-
     res.json({ message: 'Booking marked as active delivery', booking });
   } catch (error) {
     console.error(error);
@@ -936,7 +917,6 @@ export const overallBookingSummary = async (req, res) => {
         }
       }
     ]);
-
     res.status(200).json(
       new ApiResponse(200, summary[0] || {}, "Overall booking summary fetched successfully")
     );
@@ -958,7 +938,6 @@ export const getBookingSummaryByDate = async (req, res) => {
       const [day, month, year] = str.split("-");
       return new Date(`${year}-${month}-${day}`);
     };
-
     const from = parseDateString(fromDate);
     const to = parseDateString(toDate);
     to.setHours(23, 59, 59, 999);
@@ -971,14 +950,13 @@ export const getBookingSummaryByDate = async (req, res) => {
     if (user.role === "supervisor") {
       query.createdByUser = user._id;
     }
-
     const bookings = await Booking.find(query).sort({ bookingDate: -1 });
 
     const transformedBookings = bookings.map((booking) => {
       const grandTotal = booking.grandTotal || 0;
 
       const paidAmount =
-        booking.totalPaidAmount ||
+        booking.paidAmount ||
         booking.paidAmount ||
         (booking.payments?.reduce((sum, p) => sum + (p.amount || 0), 0)) ||
         0;
@@ -997,8 +975,6 @@ export const getBookingSummaryByDate = async (req, res) => {
               "Unpaid"
       };
     });
-
-
     // Calculate totals
     const summary = {
       totalPaid: transformedBookings.reduce((sum, b) => sum + b.paid, 0),
@@ -1008,7 +984,6 @@ export const getBookingSummaryByDate = async (req, res) => {
       unpaidBookings: transformedBookings.filter(b => b.paid === 0).length,
       partialBookings: transformedBookings.filter(b => b.paid > 0 && b.paid < b.grandTotal).length
     };
-
     res.status(200).json({
       message: `Bookings from ${fromDate} to ${toDate}`,
       summary: {
@@ -1030,9 +1005,6 @@ export const getBookingSummaryByDate = async (req, res) => {
     });
   }
 };
-
-
-
 
 function getEmptyTotals() {
   return {
@@ -1061,7 +1033,6 @@ export const getCADetailsSummary = async (req, res) => {
     }
 
     const baseQuery = { isDelivered: true };
-
     // Resolve pickup (startStation)
     if (pickup) {
       const startStationDoc = await Station.findOne({
@@ -1072,7 +1043,6 @@ export const getCADetailsSummary = async (req, res) => {
       }
       baseQuery.startStation = startStationDoc._id;
     }
-
     // Resolve drop (endStation)
     if (drop) {
       const endStationDoc = await Station.findOne({
@@ -1083,7 +1053,6 @@ export const getCADetailsSummary = async (req, res) => {
       }
       baseQuery.endStation = endStationDoc._id;
     }
-
     // Date range
     const dateFilter = {};
     if (fromDate) {
@@ -1214,8 +1183,6 @@ export const getCADetailsSummary = async (req, res) => {
       }
     ]);
 
-
-
     const result = {
       summary,
       totals: summary[0] || getEmptyTotals(),
@@ -1230,10 +1197,6 @@ export const getCADetailsSummary = async (req, res) => {
     );
   }
 };
-
-
-
-
 
 export const generateInvoiceByCustomer = async (req, res) => {
   try {
@@ -1341,26 +1304,18 @@ export const generateInvoiceByCustomer = async (req, res) => {
   }
 };
 
-
-
 export const getAllCustomersPendingAmounts = async (req, res) => {
   try {
-    // Step 1: Aggregate only delivered bookings
     const customerPayments = await Booking.aggregate([
-
       {
         $group: {
           _id: "$customerId",
           totalGrandTotal: { $sum: "$grandTotal" },
-          totalAmountPaid: { $sum: "$paidAmount" },
+          totalAmountPaid: { $sum: { $ifNull: ["$paidAmount", 0] } }, // handle missing paidAmount
           bookingCount: { $sum: 1 },
           unpaidBookings: {
             $sum: {
-              $cond: [
-                { $ne: ["$paymentStatus", "Paid"] },
-                1,
-                0
-              ]
+              $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0]
             }
           }
         }
@@ -1373,9 +1328,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
           as: "customer"
         }
       },
-      {
-        $unwind: "$customer"
-      },
+      { $unwind: "$customer" },
       {
         $project: {
           _id: 0,
@@ -1395,35 +1348,26 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
               "$customer.lastName"
             ]
           },
-
           email: "$customer.emailId",
           contact: "$customer.contactNumber",
           totalBookings: "$bookingCount",
           unpaidBookings: "$unpaidBookings",
           totalAmount: "$totalGrandTotal",
           totalPaid: "$totalAmountPaid",
-          pendingAmount: { $subtract: ["$totalGrandTotal", "$totalAmountPaid"] },
-          lastBookingDate: 1 // Optional: Add actual booking date if needed
+          pendingAmount: { $subtract: ["$totalGrandTotal", "$totalAmountPaid"] }
         }
       },
-      {
-        $match: {
-          pendingAmount: { $gt: 0 } // Only customers who owe money
-        }
-      },
-      {
-        $sort: { pendingAmount: -1 } // Highest due first
-      }
+      { $match: { pendingAmount: { $gt: 0 } } },
+      { $sort: { pendingAmount: -1 } }
     ]);
 
-    // Step 2: Summary Stats
     const summary = {
       totalCustomers: customerPayments.length,
-      totalPendingAmount: customerPayments.reduce((sum, cust) => sum + cust.pendingAmount, 0),
+      totalPendingAmount: customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0),
       customersWithUnpaidBookings: customerPayments.filter(c => c.unpaidBookings > 0).length,
       averagePendingPerCustomer:
         customerPayments.length > 0
-          ? customerPayments.reduce((sum, cust) => sum + cust.pendingAmount, 0) / customerPayments.length
+          ? customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0) / customerPayments.length
           : 0
     };
 
@@ -1431,7 +1375,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
       success: true,
       summary,
       customers: customerPayments,
-      message: `Found ${customerPayments.length} customers with pending payments (delivered only)`
+      message: `Found ${customerPayments.length} customers with pending payments`
     });
 
   } catch (err) {
@@ -1444,9 +1388,6 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
   }
 };
 
-
-
-
 export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   const { customerId } = req.params;
   let { amount } = req.body;
@@ -1455,18 +1396,16 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Payment amount must be greater than 0");
   }
 
-  // Step 1: Fetch all delivered bookings with pending amount for this customer
+  // Find all bookings with pending amount (delivered OR not)
   const bookings = await Booking.find({
     customerId,
-
-    $expr: { $lt: ["$paidAmount", "$grandTotal"] } // paidAmount < grandTotal
-  }).sort({ bookingDate: 1 }); // Oldest first
+    $expr: { $lt: [{ $ifNull: ["$paidAmount", 0] }, "$grandTotal"] }
+  }).sort({ bookingDate: 1 });
 
   if (!bookings.length) {
     throw new ApiError(404, "No pending bookings found for this customer");
   }
 
-  // Step 2: Apply payment
   let remainingPayment = amount;
 
   for (let booking of bookings) {
@@ -1475,12 +1414,10 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     if (remainingPayment <= 0) break;
 
     if (remainingPayment >= pendingForBooking) {
-      // Fully pay this booking
       booking.paidAmount = booking.grandTotal;
       booking.paymentStatus = "Paid";
       remainingPayment -= pendingForBooking;
     } else {
-      // Partially pay this booking
       booking.paidAmount = (booking.paidAmount || 0) + remainingPayment;
       booking.paymentStatus = "Partial";
       remainingPayment = 0;
@@ -1489,23 +1426,15 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     await booking.save();
   }
 
-  // Step 3: Calculate updated pending stats for the customer
   const updatedStats = await Booking.aggregate([
-    {
-      $match: {
-        customerId: bookings[0].customerId,
-
-      }
-    },
+    { $match: { customerId: bookings[0].customerId } },
     {
       $group: {
         _id: "$customerId",
         totalGrandTotal: { $sum: "$grandTotal" },
-        totalAmountPaid: { $sum: "$paidAmount" },
+        totalAmountPaid: { $sum: { $ifNull: ["$paidAmount", 0] } },
         unpaidBookings: {
-          $sum: {
-            $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0]
-          }
+          $sum: { $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0] }
         }
       }
     },
@@ -1533,7 +1462,6 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   );
 });
 
-
 export const getInvoicesByFilter = async (req, res) => {
   try {
     const { fromDate, toDate, startStation } = req.body;
@@ -1541,7 +1469,6 @@ export const getInvoicesByFilter = async (req, res) => {
     if (!fromDate || !toDate) {
       return res.status(400).json({ message: "fromDate and toDate are required" });
     }
-
     const from = new Date(fromDate);
     const to = new Date(toDate);
     to.setHours(23, 59, 59, 999);
@@ -1650,7 +1577,6 @@ export const getInvoicesByFilter = async (req, res) => {
         startStation,
       });
     }
-
     res.json({
       message: "Invoices fetched successfully",
       count: invoices.length,
@@ -1660,5 +1586,54 @@ export const getInvoicesByFilter = async (req, res) => {
     res.status(500).json({ message: err.message || "Server Error", error: true });
   }
 };
+export const getIncomingBookings = async (req, res) => {
+  try {
+    const user = req.user; // logged-in user
+    const { fromDate, toDate } = req.body;
 
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: "fromDate and toDate are required" });
+    }
 
+    const dateFilter = {
+      deliveryDate: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+    };
+
+    // let bookingFilter = { ...dateFilter };
+    let bookingFilter = {
+      ...dateFilter,
+
+    };
+
+    if (user.role === "supervisor") {
+      if (!user.startStation) {
+        return res.status(400).json({ message: "Supervisor must have a startStation assigned" });
+      }
+
+      // Find the supervisor's station document
+      const station = await Station.findOne({ stationName: user.startStation });
+      if (!station) {
+        return res.status(404).json({ message: "Supervisor's station not found" });
+      }
+
+      // Show all bookings where endStation equals supervisor's startStation
+      bookingFilter.endStation = station._id;
+    }
+    // Admin: no endStation filter, they see all
+
+    const incomingBookings = await Booking.find(bookingFilter)
+      .populate("startStation", "stationName")
+      .populate("endStation", "stationName")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      count: incomingBookings.length,
+      data: incomingBookings
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+};

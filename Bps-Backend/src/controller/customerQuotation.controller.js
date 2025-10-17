@@ -9,6 +9,7 @@ import { QCustomer } from "../model/Qcustomer.model.js";
 import { parse } from 'date-fns';
 const formatQuotations = (quotations) => {
   return quotations.map((q, index) => ({
+    "orderId": q.orderId || 'N/A',
     "S.No.": index + 1,
     "Booking ID": q.bookingId,
     "orderBy": q.createdByRole === "admin"
@@ -178,6 +179,7 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
   };
 
   await quotation.save();
+  await sendBookingEmail(customer.emailId, quotation);
 
   res.status(201).json(new ApiResponse(201, formattedQuotation, "Quotation created successfully"));
 });
@@ -413,11 +415,6 @@ export const getRevenue = asyncHandler(async (req, res) => {
   });
 });
 
-
-
-
-
-
 // Update Quotation Status Controller (query only, no cancel reason)
 export const updateQuotationStatus = asyncHandler(async (req, res, next) => {
   const { bookingId } = req.params;
@@ -558,3 +555,52 @@ export const sendBookingEmailById = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+
+export const getIncomingQuotations = asyncHandler(async (req, res) => {
+  const user = req.user; // logged-in user
+  const { fromDate, toDate } = req.body;
+
+  if (!fromDate || !toDate) {
+    return res.status(400).json({ message: "fromDate and toDate are required" });
+  }
+
+  // Parse dates
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+  to.setHours(23, 59, 59, 999);
+
+  let quotationFilter = {
+    quotationDate: { $gte: from, $lte: to },
+    isDelivered: false,
+    activeDelivery: false,
+  };
+
+  if (user.role === "supervisor") {
+    if (!user.startStation) {
+      return res.status(400).json({ message: "Supervisor must have a startStation assigned" });
+    }
+
+    const supervisorStation = await manageStation.findOne({
+      stationName: user.startStation,
+    });
+
+    if (!supervisorStation) {
+      return res.status(404).json({ message: "Supervisor's station not found" });
+    }
+
+    quotationFilter.endStation = supervisorStation.stationName;
+  }
+
+  // Fetch quotations
+  const quotations = await Quotation.find(quotationFilter)
+    .populate("startStation", "stationName")
+    .populate("endStation", "stationName")
+    .populate("customerId", "firstName lastName emailId")
+    .lean();
+
+  res.status(200).json({
+    success: true,
+    count: quotations.length,
+    data: quotations,
+  });
+});

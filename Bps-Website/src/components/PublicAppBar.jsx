@@ -16,6 +16,7 @@ import { Menu as MenuIcon } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { useNavigate, useLocation } from "react-router-dom";
 import TopBar from "./TopBar";
+import logo from '../assets/Logo/logo2.png'
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -93,18 +94,7 @@ const PublicAppBar = () => {
                   overflow: "hidden",
                 }}
               >
-                <Typography
-                  variant="h1"
-                  sx={{
-                    fontSize: isSmallScreen ? "1.6rem" : "1.8rem",
-                    color: "#fff",
-                    fontWeight: "bold",
-                    letterSpacing: "0.3rem",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  B&nbsp;P&nbsp;S
-                </Typography>
+                <img src={logo} style={{ height: '60px', width: '70px' }} />
               </Box>
             )}
 

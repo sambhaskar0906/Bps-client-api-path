@@ -19,8 +19,7 @@ export const generateInvoicePDF = async (customer, bookings, invoiceNo) => {
         const stationGST = headerBooking?.startStation?.gst || '07AAECB6506F1ZY';
         const stationContact = headerBooking?.startStation?.contact || '7779993453';
         // const invoiceNo = headerBooking?.bookingId || 'BHPAR2564BOOK';
-        const stateCode = '07';
-
+        // const stateCode = '07';
         const today = new Date();
         const dateOfBill = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
 
@@ -38,7 +37,7 @@ export const generateInvoicePDF = async (customer, bookings, invoiceNo) => {
         const partyAddress = (customer.senderLocality || customer.address || 'Noida sector 27 Bhawani market').replace(/\r?\n/g, ', ');
         const senderState = customer.state || 'Goa';
         const senderGst = customer.gstNumber || 'satyam1234';
-
+        const stateCode = customer.stateCode || '07';
         doc.text(`Party Name: ${fullName}`, 50, y);
         doc.text(`Date of Bill: ${dateOfBill}`, 350, y);
         y += lineHeight;

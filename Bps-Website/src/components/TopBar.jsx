@@ -9,7 +9,7 @@ import {
   useTheme,
 } from "@mui/material";
 import LocalPhoneIcon from "@mui/icons-material/LocalPhone";
-import { Block } from "@mui/icons-material";
+import logo from "../assets/Logo/logo2.png";
 
 function TopBar({ scrolling }) {
   const theme = useTheme();
@@ -21,99 +21,95 @@ function TopBar({ scrolling }) {
     <AppBar
       position="static"
       sx={{
-        backgroundColor: "white",
-        transition: "all 0.1s ease-in-out",
-        boxShadow: "none",
-        minHeight: "36px",
-        px: { xs: 2, sm: 4, md: 8, lg: 12 },
+        backgroundColor: "#f9fafc",
+        transition: "all 0.3s ease-in-out",
+        boxShadow: "0px 1px 4px rgba(0,0,0,0.1)",
+        py: 0.3,
       }}
     >
-      <Box
+      <Toolbar
+        disableGutters
         sx={{
-          px: {
-            xs: 1,
-            sm: 2,
-            md: 6,
-          },
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          px: { xs: 2, sm: 4, md: 8 },
+          minHeight: "50px",
         }}
       >
-        <Toolbar
-          disableGutters
+        {/* ---- Logo Section ---- */}
+        <Box
           sx={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
-            py: 0.5,
-            minHeight: "36px",
+            gap: 1,
           }}
         >
-          {/* Logo */}
-          <Typography
-            variant="h1"
+          <Box
+            component="img"
+            src={logo}
+            alt="Company Logo"
             sx={{
-              fontSize: isMobile ? "1.4rem" : "1.6rem",
-              color: "blue",
-              fontWeight: 700,
-              letterSpacing: "1px",
+              height: { xs: 45, sm: 55 },
+              width: "auto",
+              objectFit: "contain",
+              cursor: "pointer",
+              transition: "transform 0.3s ease",
+              "&:hover": {
+                transform: "scale(1.05)",
+              },
+            }}
+          />
+        </Box>
+
+        {/* ---- Phone Info ---- */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            backgroundColor: "#e3f2fd",
+            px: 2,
+            py: 0.5,
+            borderRadius: "20px",
+            boxShadow: "0 0 5px rgba(0,0,0,0.1)",
+          }}
+        >
+          <IconButton sx={{ color: "#1565c0", p: 0.5 }}>
+            <LocalPhoneIcon fontSize="small" />
+          </IconButton>
+
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "row", sm: "column" },
               lineHeight: 1,
             }}
           >
-            BPS
-          </Typography>
-
-          {/* Phone Info */}
-          {/* <Box sx={{ display: {md:"Block",xs:"flex" }, alignItems: "center", gap: 1 }}>
-            <IconButton sx={{ color: "blue", p: 0.5 }}>
-              <LocalPhoneIcon fontSize="small" />
-            </IconButton>
-            <Box sx={{ lineHeight: 1 , display: {md:"block" },}}>
-              <Typography
-                variant="caption"
-                sx={{ color: "black", fontWeight: 600, fontSize: "0.7rem" }}
-              >
-                CALL US NOW
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{ color: "blue", fontWeight: 700, fontSize: "0.75rem" }}
-              >
-                +91-6386963004
-              </Typography>
-            </Box> */}
-
-          {/* Phone Info */}
-          <Box
-            sx={{
-              display: { md: "flex", xs: "flex", },
-              alignItems: "center",
-              gap: 1,
-            }}
-          >
-            <IconButton sx={{ color: "blue", p: 0.5 }}>
-              <LocalPhoneIcon fontSize="small" />
-            </IconButton>
-
-            <Box
-              sx={{ lineHeight: 1, display: "flex", flexDirection: { sx: "row", md: "column" } }}
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#333",
+                fontWeight: 600,
+                display: { xs: "none", sm: "block" },
+              }}
             >
-              <Typography
-                variant="caption"
-                sx={{ display: { xs: "none", md: "block" }, color: "black", fontWeight: 600, fontSize: "0.7rem" }}
-              >
-                CALL US NOW
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{ color: "blue", fontWeight: 700, fontSize: "0.75rem" }}
-              >
-                +91-6386963004
-              </Typography>
-            </Box>
+              CALL US NOW
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "#1565c0",
+                fontWeight: 700,
+                fontSize: "0.8rem",
+                ml: { xs: 0.5, sm: 0 },
+              }}
+            >
+              +91-6386963004
+            </Typography>
           </Box>
-
-          {/* </Box> */}
-        </Toolbar>
-      </Box>
+        </Box>
+      </Toolbar>
     </AppBar>
   );
 }

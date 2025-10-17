@@ -41,82 +41,82 @@ export const createTracking = asyncHandler(async (req, res) => {
 
 
 export const getTrackingLocation = asyncHandler(async (req, res) => {
-    const { orderId } = req.params; // Get the orderId from the URL
-  
-    if (!orderId) {
-      throw new ApiError(400, "orderId is required.");
-    }
-  
-    let orderDocument;
-  
-    // Check if the orderId belongs to a Booking
-    orderDocument = await Booking.findOne({ bookingId: orderId });
-    
+  const { orderId } = req.params; // Get the orderId from the URL
+
+  if (!orderId) {
+    throw new ApiError(400, "orderId is required.");
+  }
+
+  let orderDocument;
+
+  // Check if the orderId belongs to a Booking
+  orderDocument = await Booking.findOne({ bookingId: orderId });
+
+  if (!orderDocument) {
+    // If not found in Booking, check in Quotation
+    orderDocument = await CustomerQuotation.findOne({ bookingId: orderId });
+
     if (!orderDocument) {
-      // If not found in Booking, check in Quotation
-      orderDocument = await CustomerQuotation.findOne({ bookingId: orderId });
-  
-      if (!orderDocument) {
-        throw new ApiError(404, `No Booking or Quotation found with orderId: ${orderId}`);
-      }
+      throw new ApiError(404, `No Booking or Quotation found with orderId: ${orderId}`);
     }
-  
-    // Fetch the tracking data associated with the found order (either Booking or Quotation)
-    const trackingData = await Tracking.find({ orderRef: orderDocument._id })
-      .sort({ createdAt: 1 }); // Sorting by timestamp in ascending order (oldest first)
-  
-    if (!trackingData.length) {
-      throw new ApiError(404, "No tracking data found for this orderId.");
-    }
-  
-    res.status(200).json(new ApiResponse(200, trackingData, "Tracking data fetched successfully."));
-  });
+  }
+
+  // Fetch the tracking data associated with the found order (either Booking or Quotation)
+  const trackingData = await Tracking.find({ orderRef: orderDocument._id })
+    .sort({ createdAt: 1 }); // Sorting by timestamp in ascending order (oldest first)
+
+  if (!trackingData.length) {
+    throw new ApiError(404, "No tracking data found for this orderId.");
+  }
+
+  res.status(200).json(new ApiResponse(200, trackingData, "Tracking data fetched successfully."));
+});
 
 
-  export const updateTrackingLocation = asyncHandler(async (req, res) => {
-    const { bookingId } = req.params;
-    const { latitude, longitude } = req.body;
-  
-    
-    if (!bookingId || latitude == null || longitude == null) {
-      throw new ApiError(400, "bookingId (in URL), latitude and longitude (in body) are all required.");
-    }
-  
-    
-    let order       = await Booking.findOne({ bookingId });
-    let orderType   = "Booking";
-    let refModel    = "Booking";
-  
-    if (!order) {
-      order       = await CustomerQuotation.findOne({ bookingId });
-      orderType   = "Quotation";
-      refModel    = "CustomerQuotation";
-    }
-  
-    if (!order) {
-      throw new ApiError(404, `No Booking or Quotation found with bookingId: ${bookingId}`);
-    }
-  
-    
-    let tracking = await Tracking.findOne({ orderRef: order._id });
-  
-    if (tracking) {
-      tracking.latitude   = latitude;
-      tracking.longitude  = longitude;
-      tracking.updatedAt  = Date.now();
-      await tracking.save();
-    } else {
-      tracking = await Tracking.create({
-        orderType,
-        orderRef:      order._id,
-        orderTypeRef:  refModel,
-        latitude,
-        longitude
-      });
-    }
-  
-    // 4) Return response
-    res.status(200).json(
-      new ApiResponse(200, tracking, "Location updated successfully.")
-    );
-  });
+export const updateTrackingLocation = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+  const { latitude, longitude } = req.body;
+
+
+  if (!bookingId || latitude == null || longitude == null) {
+    throw new ApiError(400, "bookingId (in URL), latitude and longitude (in body) are all required.");
+  }
+
+
+  let order = await Booking.findOne({ bookingId });
+  let orderType = "Booking";
+  let refModel = "Booking";
+
+  if (!order) {
+    order = await CustomerQuotation.findOne({ bookingId });
+    orderType = "Quotation";
+    refModel = "CustomerQuotation";
+  }
+
+  if (!order) {
+    throw new ApiError(404, `No Booking or Quotation found with bookingId: ${bookingId}`);
+  }
+
+
+  let tracking = await Tracking.findOne({ orderRef: order._id });
+
+  if (tracking) {
+    tracking.latitude = latitude;
+    tracking.longitude = longitude;
+    tracking.updatedAt = Date.now();
+    await tracking.save();
+  } else {
+    tracking = await Tracking.create({
+      orderType,
+      orderRef: order._id,
+      orderTypeRef: refModel,
+      latitude,
+      longitude
+    });
+  }
+
+  // 4) Return response
+  res.status(200).json(
+    new ApiResponse(200, tracking, "Location updated successfully.")
+  );
+});

@@ -223,6 +223,11 @@ const BookingSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    orderId: {
+      type: String,
+      default: null
+    },
+
     totalCancelled: {
       type: Number,
       default: 0
@@ -267,6 +272,8 @@ const BookingSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+BookingSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 // Auto-generate booking ID
 BookingSchema.pre('validate', function (next) {

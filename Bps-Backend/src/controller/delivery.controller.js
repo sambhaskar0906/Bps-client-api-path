@@ -105,7 +105,9 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     const alreadyAssigned = await Delivery.findOne({ bookingId });
     if (alreadyAssigned) continue;
 
-    await Booking.updateOne({ bookingId }, { activeDelivery: true });
+    // 🟩 Save both activeDelivery and orderId inside Booking
+
+
 
     const deliveryObj = {
       orderId: generateOrderId(),
@@ -121,7 +123,10 @@ export const assignDelivery = asyncHandler(async (req, res) => {
       contact: booking.mobile || 'N/A',
     };
 
-
+    await Booking.updateOne(
+      { bookingId },
+      { activeDelivery: true, orderId: deliveryObj.orderId }
+    );
     deliveries.push(deliveryObj);
 
     responseData.push({
@@ -137,14 +142,11 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     });
   }
   for (const quotationId of quotationIds) {
-    const quotation = await Quotation.findOne({ bookingId: quotationId })
-
+    const quotation = await Quotation.findOne({ bookingId: quotationId });
     if (!quotation) continue;
 
     const alreadyAssigned = await Delivery.findOne({ quotationId });
     if (alreadyAssigned) continue;
-
-    await Quotation.updateOne({ bookingId: quotationId }, { activeDelivery: true });
 
     const deliveryObj = {
       orderId: generateOrderId(),
@@ -167,7 +169,14 @@ export const assignDelivery = asyncHandler(async (req, res) => {
       orderBy: quotation.createdByRole || 'N/A',
       date: quotation.quotationDate?.toISOString().slice(0, 10) || 'N/A',
     });
+
+    // ✅ Update quotation here
+    await Quotation.updateOne(
+      { bookingId: quotationId },
+      { activeDelivery: true, orderId: deliveryObj.orderId }
+    );
   }
+
 
 
   // Handle quotationIds similarly if needed...
@@ -413,4 +422,3 @@ export const listFinalDeliveries = asyncHandler(async (req, res) => {
 
   res.status(200).json(new ApiResponse(200, data, "Final delivery list fetched successfully."));
 });
-

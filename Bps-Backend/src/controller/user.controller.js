@@ -8,13 +8,12 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt"
 // Register a new user
 export const registerUser = asyncHandler(async (req, res) => {
-
   try {
     if (req.body.role === 'admin' && req.body.isBlacklisted === true) {
       throw new ApiError(400, "Admin users cannot be blacklisted");
     }
-    let userData = { ...req.body };
 
+    let userData = { ...req.body };
 
     if (req.files) {
       if (req.files['idProofPhoto']) {
@@ -25,19 +24,29 @@ export const registerUser = asyncHandler(async (req, res) => {
       }
     }
 
-
     if (!userData.idProofPhoto || !userData.adminProfilePhoto) {
       throw new ApiError(400, "Both idProofPhoto and adminProfilePhoto are required.");
     }
 
     const user = new User(userData);
     await user.save();
+
     res.status(201).json(new ApiResponse(201, "User registered successfully", user));
   } catch (error) {
-    console.log("error message", error.message);
-    throw new ApiError(400, "Registration failed", error.message);
+    console.log("error message", error);
+
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = Object.values(error.keyValue)[0];
+      throw new ApiError(409, `${field} '${value}' already exists.`);
+    }
+
+    throw new ApiError(400, error.message || "Registration failed");
   }
 });
+
+
 export const loginUser = asyncHandler(async (req, res) => {
   try {
     const { emailId, password } = req.body;
@@ -207,8 +216,6 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
 });
 
-
-
 // Count total admins
 export const countTotalAdmins = asyncHandler(async (req, res) => {
   const totalAdmins = await User.countDocuments({ role: 'admin' });
@@ -278,7 +285,6 @@ export const getAdminsList = asyncHandler(async (req, res) => {
   }
 });
 
-
 // Get list of deactivated supervisors
 export const getDeactivatedSupervisorsList = asyncHandler(async (req, res) => {
   try {
@@ -319,7 +325,6 @@ export const getBlacklistedSupervisorsList = asyncHandler(async (req, res) => {
   }
 });
 
-
 export const deleteUser = asyncHandler(async (req, res) => {
   try {
 
@@ -330,9 +335,6 @@ export const deleteUser = asyncHandler(async (req, res) => {
     }
 
     res.status(200).json(new ApiResponse(200, "User deleted successfully"));
-
-
-
   } catch (error) {
     console.error("Delete user error:", error.message);
     throw new ApiError(500, error.message);
@@ -387,8 +389,6 @@ export const updateSupervisorStatus = asyncHandler(async (req, res) => {
 export const changePassword = asyncHandler(async (req, res) => {
   const { oldpassword, newPassword, emailId, code } = req.body;
   let user;
-
-
   // Case 1: Authenticated user using old password
   if (oldpassword) {
     user = await User.findById(req.user?._id);
@@ -455,8 +455,6 @@ export const sentResetCode = asyncHandler(async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     user.verificationCode = code;
     user.verificationCodeExpires = Date.now() + 10 * 60 * 1000;
-
-
     // Save without validation (to only update the code fields)
     await user.save({ validateBeforeSave: false });
 
@@ -482,8 +480,4 @@ export const sentResetCode = asyncHandler(async (req, res) => {
     res.status(500).json({ message: "Something went wrong", error: error.message });
   }
 });
-
-
-
 export { tokenBlacklist };
-

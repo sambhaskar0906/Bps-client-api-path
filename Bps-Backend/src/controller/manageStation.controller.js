@@ -13,7 +13,7 @@ const createManageStation = asyncHandler(async (req, res) => {
   }
 
   const existedStation = await manageStation.findOne({
-    $or: [{ stationName }, { emailId }]
+    $or: [{ stationName }, { emailId }, { contact }]
   });
 
   if (existedStation) {

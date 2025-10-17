@@ -144,10 +144,22 @@ const quotationSchema = new mongoose.Schema({
     type: String,
 
   },
+  orderId: {
+    type: String,
+    default: null
+  },
   isDelivered: {
-  type: Boolean,
-  default: false,
-},
+    type: Boolean,
+    default: false,
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  }
 }, { timestamps: true });
 
 
@@ -192,4 +204,3 @@ quotationSchema.pre("save", async function (next) {
 const Quotation = mongoose.models.Quotation || mongoose.model("Quotation", quotationSchema);
 
 export default Quotation;
-

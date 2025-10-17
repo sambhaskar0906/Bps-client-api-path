@@ -47,16 +47,19 @@ const QcustomerSearch = ({ onCustomerSelect }) => {
             return;
         }
 
-        const matches = customerList.filter((customer) => {
-            const contact = customer.contactNumber?.toString().toLowerCase();
-            const email = customer.emailId?.toLowerCase();
-            const name = customer.name?.toLowerCase().replace(/\s+/g, ' ');
-            return (
-                contact.includes(search) ||
-                email.includes(search) ||
-                name.includes(search)
-            );
-        });
+        const matches = Array.isArray(customerList)
+            ? customerList.filter((customer) => {
+                const contact = customer.contactNumber ? customer.contactNumber.toString().toLowerCase() : "";
+                const email = customer.emailId ? customer.emailId.toLowerCase() : "";
+                const name = customer.name ? customer.name.toLowerCase().replace(/\s+/g, ' ') : "";
+
+                return (
+                    contact.includes(search) ||
+                    email.includes(search) ||
+                    name.includes(search)
+                );
+            })
+            : [];
 
         if (matches.length > 0) {
             setFilteredCustomers(matches);
