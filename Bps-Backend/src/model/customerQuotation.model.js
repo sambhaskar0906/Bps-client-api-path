@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-
 const quotationSchema = new mongoose.Schema({
   bookingId: {
     type: String,
@@ -8,7 +7,7 @@ const quotationSchema = new mongoose.Schema({
   customerId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: "Customer",
+    ref: "QCustomer", // Fixed reference name
   },
   startStation: {
     type: mongoose.Schema.Types.ObjectId,
@@ -85,22 +84,22 @@ const quotationSchema = new mongoose.Schema({
   additionalCmt: String,
   sTax: {
     type: Number,
-    required: true
+    default: 0
   },
   sgst: {
     type: Number,
-    // required: true
+    default: 0
   },
   grandTotal: {
     type: Number,
   },
   amount: {
     type: Number,
-    required: true,
+    default: 0,
   },
   freight: {
     type: Number,
-    // required:true
+    default: 0
   },
   productDetails: [
     {
@@ -120,6 +119,11 @@ const quotationSchema = new mongoose.Schema({
         type: Number,
         required: true
       },
+      topay: {
+        type: String,
+        required: true,
+        enum: ["Paid", "toPay"], // Fixed enum value
+      }
     },
   ],
 
@@ -138,11 +142,9 @@ const quotationSchema = new mongoose.Schema({
   createdByRole: {
     type: String,
     enum: ['admin', 'supervisor'],
-
   },
   createdByUser: {
     type: String,
-
   },
   orderId: {
     type: String,
@@ -160,47 +162,51 @@ const quotationSchema = new mongoose.Schema({
     type: Date,
     default: null
   }
-}, { timestamps: true });
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
 
+// Virtual for product total
+quotationSchema.virtual("productTotal").get(function () {
+  return this.productDetails.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+});
+
+// Virtual for total quantity
+quotationSchema.virtual("bookingRequestTotal").get(function () {
+  return this.productDetails.reduce((acc, item) => acc + item.quantity, 0);
+});
+
+// Virtual for total tax
+quotationSchema.virtual("totalTax").get(function () {
+  const productTotal = this.productTotal;
+  const sTaxAmount = (productTotal * this.sTax) / 100;
+  const sgstAmount = (productTotal * this.sgst) / 100;
+  return sTaxAmount + sgstAmount;
+});
+
+// Virtual for computed total revenue
+quotationSchema.virtual("computedTotalRevenue").get(function () {
+  const productTotal = this.productTotal;
+  const totalTax = this.totalTax;
+  return productTotal + totalTax + this.freight + this.amount;
+});
 
 quotationSchema.pre("save", async function (next) {
-  // Only generate if not already set
+  // Generate booking ID if not set
   if (!this.bookingId) {
-    const randomNumber = Math.floor(1000 + Math.random() * 9000); // 4-digit random
+    const randomNumber = Math.floor(1000 + Math.random() * 9000);
     this.bookingId = `BHPAR${randomNumber}QUOK`;
   }
 
-
-  // quotationSchema.virtual("bookingRequestTotal").get(function () {
-  //   return this.productDetails.reduce((acc, item) => acc + item.quantity, 0);
-  // });
-
-  // quotationSchema.virtual("totalTax").get(function () {
-  //   return this.sTax + this.sgst + this.freight;
-  // });
-
-  // quotationSchema.virtual("computedTotalRevenue").get(function () {
-
-  //   const productTotal = this.productDetails.reduce((acc, item) => {
-  //     return acc + (item.price * item.quantity);
-  //   }, 0);
-
-
-  //   const totalRevenue = productTotal - (this.sTax + this.sgst) + this.amount;
-
-  //   return totalRevenue;
-  // });
-  // const productTotal = this.productDetails.reduce((acc, item) => {
-  //   return acc + item.price * item.quantity;
-  // }, 0);
-  // this.grandTotal = productTotal + this.sTax + this.sgst + this.amount;
+  // Calculate grandTotal if not set
+  if (!this.grandTotal) {
+    this.grandTotal = this.computedTotalRevenue;
+  }
 
   next();
 });
 
-// quotationSchema.set("toJSON", { virtuals: true });
-// quotationSchema.set("toObject", { virtuals: true });
-
 const Quotation = mongoose.models.Quotation || mongoose.model("Quotation", quotationSchema);
-
 export default Quotation;

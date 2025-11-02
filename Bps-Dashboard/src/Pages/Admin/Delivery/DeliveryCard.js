@@ -16,17 +16,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom'
 import { fetchBookingsByType } from '../../../features/booking/bookingSlice';
 import { fetchBookingRequest as fetchQuotationRequest } from '../../../features/quotation/quotationSlice';
-import { fetchavailableList } from '../../../features/Driver/driverSlice';
-import { getAvailableVehiclesList } from '../../../features/vehicle/vehicleSlice';
-import { assignDeliveries, finalDeliveryList, finalDeliveryWhatsApp, finalDeliveryMail } from '../../../features/delivery/deliverySlice';
+
+import { assignDeliveries, finalDeliveryList, finalDeliveryWhatsApp, finalDeliveryMail, VehicleAvailabile, driverAvailabile } from '../../../features/delivery/deliverySlice';
 import SendIcon from '@mui/icons-material/Send';
 
 const DeliveryCard = () => {
     const dispatch = useDispatch();
     const { requestCount: bookingRequestCountValue, list: bookingList, loading: bookingLoading } = useSelector((state) => state.bookings);
     const { requestCount: quotationRequestCountValue, list: quotationList, loading: quotationLoading } = useSelector((state) => state.quotations);
-    const { list: driverList = [] } = useSelector((state) => state.drivers);
-    const { list: vehicleList = [] } = useSelector((state) => state.vehicles);
     const { list: finalList } = useSelector((state) => state.deliveries);
 
     const [selectedCard, setSelectedCard] = useState('booking');
@@ -35,15 +32,26 @@ const DeliveryCard = () => {
     const [driver, setDriver] = useState('');
     const [vehicle, setVehicle] = useState('');
     const [device, setDevice] = useState('');
+    const {
+        driver: driverList = [],
+        vehicle: vehicleList = []
+    } = useSelector((state) => state.deliveries || {});
+
 
     useEffect(() => {
         dispatch(fetchBookingsByType('request'));
         dispatch(fetchQuotationRequest());
-        dispatch(getAvailableVehiclesList());
-        dispatch(fetchavailableList());
+        dispatch(VehicleAvailabile('Booking'));
+        dispatch(driverAvailabile('Booking'));
 
         dispatch(finalDeliveryList());
     }, [dispatch]);
+    useEffect(() => {
+        const type = selectedCard === 'quotation' ? 'Quotation' : 'Booking';
+        dispatch(VehicleAvailabile(type));
+        dispatch(driverAvailabile(type));
+    }, [selectedCard, dispatch]);
+
 
     const handleCardClick = (type) => {
         setSelectedCard(type);
@@ -70,10 +78,11 @@ const DeliveryCard = () => {
         const payload = {
             bookingIds: selectedCard === 'booking' ? selectedItems.booking : [],
             quotationIds: selectedCard === 'quotation' ? selectedItems.quotation : [],
-            driverName: driver,
+            driverId: driver,
             vehicleModel: selectedVehicle?.vehicleModel || '',
             device: device
         };
+        console.log('Assign Payload:', payload);
 
         dispatch(assignDeliveries(payload)).then((res) => {
             if (res.type.includes('fulfilled')) {
@@ -110,6 +119,7 @@ const DeliveryCard = () => {
 
     const currentList = selectedCard === 'quotation' ? quotationList : selectedCard === 'final' ? finalList : bookingList;
     const currentLoading = selectedCard === 'quotation' ? quotationLoading : selectedCard === 'final' ? false : bookingLoading;
+    console.log('Driver List:', driverList);
 
     return (
         <Box sx={{ padding: 3 }}>
@@ -167,7 +177,7 @@ const DeliveryCard = () => {
                     <Select value={driver} onChange={(e) => setDriver(e.target.value)} label="Driver">
                         <MenuItem value="">None</MenuItem>
                         {driverList.map((d) => (
-                            <MenuItem key={d._id} value={d.name || d.driverName}>{d.name || d.driverName}</MenuItem>
+                            <MenuItem key={d.driverId} value={d.driverId}>{d.name || d.driverName}</MenuItem>
                         ))}
                     </Select>
                 </FormControl>
@@ -177,7 +187,9 @@ const DeliveryCard = () => {
                     <Select value={vehicle} onChange={(e) => setVehicle(e.target.value)} label="Vehicle">
                         <MenuItem value="">None</MenuItem>
                         {vehicleList.map((v) => (
-                            <MenuItem key={v.vehicleId} value={v.vehicleId}>{v.vehicleModel}</MenuItem>
+                            <MenuItem key={v._id || v.vehicleId} value={v.vehicleId}>
+                                {v.vehicleModel}
+                            </MenuItem>
                         ))}
                     </Select>
                 </FormControl>
@@ -269,7 +281,7 @@ const DeliveryCard = () => {
                             )}
 
                             <Typography>{idx + 1}</Typography>
-                            <Typography>{item.orderId || item.bookingId || item['Booking ID']}</Typography>
+                            <Typography>{item?.data?.orderId || item.bookingId || item['Booking ID']}</Typography>
                             {selectedCard === 'final' ? (
                                 <>
                                     <Typography>{item.driverName || 'N/A'}</Typography>

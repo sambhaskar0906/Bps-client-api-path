@@ -1,5 +1,6 @@
 
 
+
 import express from 'express';
 import {
   assignDelivery,
@@ -10,7 +11,9 @@ import {
   listQuotationDeliveries,
   countFinalDeliveries,
   listFinalDeliveries,
-  sendDeliverySuccessByOrderId
+  sendDeliverySuccessByOrderId,
+  getAvailableDrivers,
+  getAvailableVehicles
 } from '../controller/delivery.controller.js';
 import { parseFormData } from '../middleware/multerParser.middleware.js'
 const router = express.Router();
@@ -37,4 +40,6 @@ router.get("/final/list", listFinalDeliveries);
 // Finalize a Delivery (based on orderId)
 router.put('/finalize/:orderId', finalizeDelivery);
 router.post('/send-booking-email/:orderId', sendDeliverySuccessByOrderId);
+router.get('/driver', getAvailableDrivers);
+router.get('/vehicle', getAvailableVehicles);
 export default router;

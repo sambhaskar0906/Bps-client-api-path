@@ -59,7 +59,7 @@ router.route("/admin/user/:adminId").put(upload.fields([
   }
 ]), multerErrorHandler, updateUser);
 
-router.route("/changePassword").post(verifyJwt,changePassword);
+router.route("/changePassword").post(verifyJwt, changePassword);
 router.route("/send-reset-code").post(sentResetCode);
 router.delete("/admin/user/:adminId", verifyJwt, deleteUser);
 

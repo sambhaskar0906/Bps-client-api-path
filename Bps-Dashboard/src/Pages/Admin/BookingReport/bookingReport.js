@@ -11,6 +11,8 @@ import { caReport } from "../../../features/booking/bookingSlice";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { fetchStations } from '../../../features/stations/stationSlice'
+import { format } from 'date-fns';
+
 const BookingReport = () => {
     const [fromDate, setFromDate] = useState(null);
     const [endDate, setEndDate] = useState(null);
@@ -20,9 +22,20 @@ const BookingReport = () => {
     const { list5 } = useSelector((state) => state.bookings);
     const summary = list5?.summary || [];
     const { list: stations } = useSelector((state) => state.stations);
+
     useEffect(() => {
         dispatch(fetchStations());
     }, [dispatch]);
+
+    // Function to format date as DD-MM-YYYY
+    const formatToDDMMYYYY = (date) => {
+        if (!date) return '';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+    };
+
     const handleSubmit = async () => {
         if (!fromDate || !endDate) {
             alert("Please select both dates");
@@ -30,11 +43,12 @@ const BookingReport = () => {
         }
 
         try {
+            // FIXED: Send dates in DD-MM-YYYY format that backend expects
             await dispatch(caReport({
                 pickup: fromCity,
                 drop: toCity,
-                fromDate: fromDate.toISOString().split("T")[0],
-                toDate: endDate.toISOString().split("T")[0]
+                fromDate: formatToDDMMYYYY(fromDate), // "31-10-2025" instead of "2025-10-31"
+                toDate: formatToDDMMYYYY(endDate)     // "01-11-2025" instead of "2025-11-01"
             })).unwrap();
         } catch (err) {
             console.error("Error fetching CA Report:", err);
@@ -69,7 +83,7 @@ const BookingReport = () => {
         doc.setFontSize(13).setFont("helvetica", "bold").setTextColor(0, 0, 0);
         doc.text("Voucher Register", 105, 35, { align: "center" });
 
-        // Date range
+        // Date range - FIXED: Use the filters from response
         doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(100);
         doc.text(`${filters.fromDate || ""} to ${filters.toDate || ""}`, 105, 40, { align: "center" });
 
@@ -154,6 +168,7 @@ const BookingReport = () => {
                     <Button
                         variant="contained"
                         onClick={handleDownload}
+                        disabled={!summary || summary.length === 0}
                     >
                         Download PDF
                     </Button>
@@ -161,6 +176,9 @@ const BookingReport = () => {
             </Grid>
 
             <Paper elevation={3} sx={{ p: 3, borderRadius: 3, mb: 4, mt: 2 }}>
+                <Typography variant="h6" gutterBottom color="primary">
+                    Search Filters
+                </Typography>
                 <Grid container spacing={2} alignItems={'center'}>
                     <Grid size={{ xs: 12, md: 6 }}>
                         <TextField
@@ -197,6 +215,7 @@ const BookingReport = () => {
                             <DatePicker
                                 label="From Date"
                                 value={fromDate}
+                                format="dd/MM/yyyy"
                                 onChange={setFromDate}
                                 renderInput={(params) => <TextField fullWidth {...params} />}
                             />
@@ -207,60 +226,77 @@ const BookingReport = () => {
                             <DatePicker
                                 label="End Date"
                                 value={endDate}
+                                format="dd/MM/yyyy"
                                 onChange={setEndDate}
                                 renderInput={(params) => <TextField fullWidth {...params} />}
                             />
                         </LocalizationProvider>
                     </Grid>
                     <Grid item xs={12} md={2}>
-                        <Button variant="contained" fullWidth onClick={handleSubmit}>Submit</Button>
+                        <Button
+                            variant="contained"
+                            fullWidth
+                            onClick={handleSubmit}
+                            disabled={!fromDate || !endDate}
+                        >
+                            Submit
+                        </Button>
                     </Grid>
                 </Grid>
             </Paper>
 
             {/* Summary Table */}
-            {summary && (
+            {summary.length > 0 && (
                 <Paper elevation={2} sx={{ p: 3, borderRadius: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" gutterBottom color="primary">
                         Booking Summary
                     </Typography>
                     <Table>
                         <TableHead>
                             <TableRow>
-
-                                <TableCell>CustomerName</TableCell>
-                                <TableCell>Sender Gst</TableCell>
-                                <TableCell>StartStation</TableCell>
-                                <TableCell>EndStation</TableCell>
-                                <TableCell>VoucherCount</TableCell>
-                                <TableCell>TaxableValue</TableCell>
-                                <TableCell>CentralTax</TableCell>
-                                <TableCell>StateTax</TableCell>
-                                <TableCell>IntegratedTax</TableCell>
-                                <TableCell>InvoiceAmount</TableCell>
-                                <TableCell>CessAmount</TableCell>
+                                <TableCell>Customer Name</TableCell>
+                                <TableCell>Sender GST</TableCell>
+                                <TableCell>Start Station</TableCell>
+                                <TableCell>End Station</TableCell>
+                                <TableCell>Voucher Count</TableCell>
+                                <TableCell>Taxable Value</TableCell>
+                                <TableCell>Central Tax</TableCell>
+                                <TableCell>State Tax</TableCell>
+                                <TableCell>Integrated Tax</TableCell>
+                                <TableCell>Invoice Amount</TableCell>
+                                <TableCell>Cess Amount</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {summary.map((row, idx) => (
                                 <TableRow key={idx}>
-
-                                    <TableCell>{row.customerNames?.join(', ')}</TableCell>
-                                    <TableCell>{row.senderGst}</TableCell>
-                                    <TableCell>{row.startStation}</TableCell>
-                                    <TableCell>{row.endStation}</TableCell>
-                                    <TableCell>{row.voucherCount}</TableCell>
-                                    <TableCell>{row.taxableValue}</TableCell>
-                                    <TableCell>{row.centralTax}</TableCell>
-                                    <TableCell>{row.stateTax}</TableCell>
-                                    <TableCell>{row.integratedTax}</TableCell>
-                                    <TableCell>{row.invoiceAmount}</TableCell>
-                                    <TableCell>{row.cessAmount}</TableCell>
+                                    <TableCell>{row.customerNames?.join(', ') || 'N/A'}</TableCell>
+                                    <TableCell>{row.senderGst || 'N/A'}</TableCell>
+                                    <TableCell>{row.startStation || 'N/A'}</TableCell>
+                                    <TableCell>{row.endStation || 'N/A'}</TableCell>
+                                    <TableCell>{row.voucherCount || 0}</TableCell>
+                                    <TableCell>₹{row.taxableValue || 0}</TableCell>
+                                    <TableCell>₹{row.centralTax || 0}</TableCell>
+                                    <TableCell>₹{row.stateTax || 0}</TableCell>
+                                    <TableCell>₹{row.integratedTax || 0}</TableCell>
+                                    <TableCell>₹{row.invoiceAmount || 0}</TableCell>
+                                    <TableCell>₹{row.cessAmount || 0}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
-
                     </Table>
+                </Paper>
+            )}
+
+            {/* Show message when no data */}
+            {list5 && summary.length === 0 && (
+                <Paper elevation={2} sx={{ p: 3, borderRadius: 3, textAlign: 'center' }}>
+                    <Typography variant="h6" color="textSecondary">
+                        No data found for the selected filters
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" mt={1}>
+                        Try adjusting your date range or station filters
+                    </Typography>
                 </Paper>
             )}
         </Box>

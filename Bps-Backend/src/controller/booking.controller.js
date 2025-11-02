@@ -26,32 +26,67 @@ const transporter = nodemailer.createTransport({
 });
 //base condition
 const getBookingFilterByType = (type, user) => {
-  let baseFilter = {};
+  let baseFilter = { isDeleted: false }; // Always include isDeleted: false
 
   if (type === 'active') {
-    baseFilter = { activeDelivery: true };
+    baseFilter.activeDelivery = true;
   } else if (type === 'cancelled') {
-    baseFilter = { totalCancelled: { $gt: 0 } };
+    baseFilter.totalCancelled = { $gt: 0 };
   } else {
-    baseFilter = {
-      activeDelivery: false,
-      totalCancelled: 0,
-      $or: [
-        { createdByRole: { $in: ['admin', 'supervisor'] } },
-        { requestedByRole: 'public', isApproved: true }
-      ]
-    };
+    // For 'request' type - bookings that are not active, not cancelled, and pending approval
+    baseFilter.$and = [
+      {
+        $or: [
+          { activeDelivery: false },
+          { activeDelivery: { $exists: false } } // Handle cases where field might not exist
+        ]
+      },
+      {
+        $or: [
+          { totalCancelled: 0 },
+          { totalCancelled: { $exists: false } } // Handle cases where field might not exist
+        ]
+      },
+      {
+        $or: [
+          // Admin/supervisor created bookings
+          { createdByRole: { $in: ['admin', 'supervisor'] } },
+          // Public requests that are approved OR pending approval
+          {
+            $or: [
+              { requestedByRole: 'public', isApproved: true },
+              { requestedByRole: 'public', isApproved: false } // Include pending approvals too
+            ]
+          },
+          // Fallback for any other cases
+          {
+            $and: [
+              { activeDelivery: false },
+              { totalCancelled: 0 }
+            ]
+          }
+        ]
+      }
+    ];
   }
 
+  // Add user-specific filtering for supervisors
   if (user?.role === 'supervisor') {
-    return {
-      $and: [
-        baseFilter,
-        { createdByUser: user._id }
-      ]
-    };
+    if (baseFilter.$and) {
+      // If we already have $and, add the user filter to it
+      baseFilter.$and.push({ createdByUser: user._id });
+    } else {
+      // Otherwise create a new $and condition
+      baseFilter = {
+        $and: [
+          baseFilter,
+          { createdByUser: user._id }
+        ]
+      };
+    }
   }
 
+  console.log(`Filter for type "${type}":`, JSON.stringify(baseFilter, null, 2));
   return baseFilter;
 };
 
@@ -476,11 +511,24 @@ export const updateBooking = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
+// backend controller
 export const deleteBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    let booking;
+
+    // Check if the ID is a MongoDB ObjectId (24 character hex string)
+    if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      booking = await Booking.findById(req.params.id);
+    } else {
+      // If not ObjectId, search by bookingId
+      booking = await Booking.findOne({ bookingId: req.params.id });
+    }
+
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found"
+      });
     }
 
     // Only soft delete
@@ -494,10 +542,21 @@ export const deleteBooking = async (req, res) => {
       data: booking
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Delete booking error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
-
+export const listDeletedBookings = async (req, res) => {
+  try {
+    const deletedBookings = await Booking.find({ isDeleted: true });
+    res.status(200).json({ count: deletedBookings.length, bookings: deletedBookings });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 export const getDeletedBookings = async (req, res) => {
   try {
     const deletedBookings = await Booking.find({ isDeleted: true });
@@ -538,26 +597,34 @@ export const getBookingStatusList = async (req, res) => {
     const { type } = req.query;
     let filter;
     const user = req.user;
-    if (type === 'active') {
-      filter = { activeDelivery: true };
-    } else if (type === 'cancelled') {
-      filter = { totalCancelled: { $gt: 0 } };
-    } else {
 
+    // Always include isDeleted: false in all filters
+    if (type === 'active') {
+      filter = {
+        activeDelivery: true,
+        isDeleted: false
+      };
+    } else if (type === 'cancelled') {
+      filter = {
+        totalCancelled: { $gt: 0 },
+        isDeleted: false
+      };
+    } else {
+      // For request bookings
       filter = {
         activeDelivery: false,
         isDelivered: { $ne: true },
         totalCancelled: 0,
+        isDeleted: false, // Added isDeleted: false here
         $or: [
-          { createdByRole: { $in: ['admin', 'supervisor'] } }, // Always include bookings created by admin/supervisor
-          { requestedByRole: 'public', isApproved: true }        // Only approved bookings created by public users
+          { createdByRole: { $in: ['admin', 'supervisor'] } },
+          { requestedByRole: 'public', isApproved: true }
         ]
-
-      }
-
+      };
     }
-    if (user.role === 'supervisor') {
 
+    // Add supervisor filter if applicable
+    if (user.role === 'supervisor') {
       filter = {
         $and: [
           filter,
@@ -565,15 +632,34 @@ export const getBookingStatusList = async (req, res) => {
         ]
       };
     }
+
+    console.log('Booking filter:', JSON.stringify(filter, null, 2)); // Debug log
+
     const bookings = await Booking.find(filter)
-      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted') // Added isDeleted to select
       .populate('startStation endStation', 'stationName')
-      .populate('createdByRole', ' role')
+      .populate('createdByRole', 'role')
       .lean();
 
+    // Debug: Check if any bookings have isDeleted: true
+    const deletedBookings = bookings.filter(b => b.isDeleted === true);
+    if (deletedBookings.length > 0) {
+      console.warn(`Found ${deletedBookings.length} deleted bookings in results:`);
+      console.warn(deletedBookings.map(b => ({
+        bookingId: b.bookingId,
+        isDeleted: b.isDeleted
+      })));
+    }
 
-    // Filter out bookings with missing station references
-    const validBookings = bookings.filter(b => b.startStation && b.endStation);
+    // Filter out bookings with missing station references AND ensure they're not deleted
+    const validBookings = bookings.filter(b =>
+      b.startStation &&
+      b.endStation &&
+      b.isDeleted === false // Double check isDeleted
+    );
+
+    console.log(`Total bookings found: ${bookings.length}`);
+    console.log(`Valid bookings after filtering: ${validBookings.length}`);
 
     const data = validBookings.map((b, i) => ({
       SNo: i + 1,
@@ -587,7 +673,6 @@ export const getBookingStatusList = async (req, res) => {
               ? `Supervisor (${b.startStation?.stationName || 'N/A'})`
               : `${b.createdByRole} ${b.startStation?.stationName || ''}`.trim() || 'N/A',
       date: b.bookingDate ? new Date(b.bookingDate).toLocaleDateString('en-CA') : 'N/A',
-
       fromName: b.senderName || 'N/A',
       pickup: b.startStation?.stationName || 'N/A',
       toName: b.receiverName || 'N/A',
@@ -601,10 +686,22 @@ export const getBookingStatusList = async (req, res) => {
       }
     }));
 
-    res.json({ count: data.length, data });
+    res.json({
+      success: true,
+      count: data.length,
+      data,
+      debug: {
+        totalFound: bookings.length,
+        validAfterFilter: validBookings.length,
+        hasDeletedBookings: deletedBookings.length > 0
+      }
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    console.error('Error in getBookingStatusList:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
 
@@ -934,34 +1031,89 @@ export const getBookingSummaryByDate = async (req, res) => {
       return res.status(400).json({ message: "Both fromDate and toDate are required" });
     }
 
+    // Fixed date parsing with proper timezone handling
     const parseDateString = (str) => {
       const [day, month, year] = str.split("-");
-      return new Date(`${year}-${month}-${day}`);
+      // Create date in local timezone at start of day (00:00:00)
+      const date = new Date(year, month - 1, day);
+      return date;
     };
+
     const from = parseDateString(fromDate);
     const to = parseDateString(toDate);
+
+    // Set to date to end of day (23:59:59.999)
     to.setHours(23, 59, 59, 999);
 
-    if (isNaN(from) || isNaN(to)) {
+    // Validate dates
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
-    const query = { bookingDate: { $gte: from, $lte: to } };
+    console.log('Searching bookings between:', from.toISOString(), 'and', to.toISOString());
+
+    const query = {
+      bookingDate: {
+        $gte: from,
+        $lte: to
+      }
+    };
+
     if (user.role === "supervisor") {
       query.createdByUser = user._id;
     }
+
     const bookings = await Booking.find(query).sort({ bookingDate: -1 });
+
+    // Debug: Check what dates we found
+    console.log(`Found ${bookings.length} bookings:`);
+    bookings.forEach(booking => {
+      console.log(`- ${booking.bookingId}: ${booking.bookingDate}`);
+    });
 
     const transformedBookings = bookings.map((booking) => {
       const grandTotal = booking.grandTotal || 0;
 
-      const paidAmount =
-        booking.paidAmount ||
-        booking.paidAmount ||
-        (booking.payments?.reduce((sum, p) => sum + (p.amount || 0), 0)) ||
-        0;
+      // Calculate payment based on items' toPay status
+      let paidAmount = 0;
+      let totalPayableAmount = 0;
+      let paidItemsAmount = 0;
+
+      if (booking.items && Array.isArray(booking.items)) {
+        booking.items.forEach(item => {
+          const itemAmount = Number(item.amount) || 0;
+          totalPayableAmount += itemAmount;
+
+          if (item.toPay === "paid") {
+            paidItemsAmount += itemAmount;
+          }
+        });
+      }
+
+      // Calculate paid amount based on items payment status
+      if (paidItemsAmount > 0) {
+        if (paidItemsAmount >= totalPayableAmount) {
+          // All items are fully paid
+          paidAmount = grandTotal;
+        } else {
+          // Some items are paid - calculate proportional amount
+          const paidRatio = totalPayableAmount > 0 ? paidItemsAmount / totalPayableAmount : 0;
+          paidAmount = Math.round(grandTotal * paidRatio);
+        }
+      } else {
+        // No items are marked as paid, use booking-level paidAmount
+        paidAmount = booking.paidAmount || 0;
+      }
 
       const toPayAmount = Math.max(grandTotal - paidAmount, 0);
+
+      // Determine payment status
+      let paymentStatus = "Unpaid";
+      if (paidAmount >= grandTotal && grandTotal > 0) {
+        paymentStatus = "Paid";
+      } else if (paidAmount > 0 && paidAmount < grandTotal) {
+        paymentStatus = "Partial";
+      }
 
       return {
         ...booking.toObject(),
@@ -969,32 +1121,41 @@ export const getBookingSummaryByDate = async (req, res) => {
         paid: paidAmount,
         toPay: toPayAmount,
         itemsCount: booking.items?.length || 0,
-        paymentStatus:
-          paidAmount >= grandTotal ? "Paid" :
-            paidAmount > 0 ? "Partial" :
-              "Unpaid"
+        paymentStatus: paymentStatus
       };
     });
-    // Calculate totals
+
+    // Calculate summary totals
+    const totalPaid = transformedBookings.reduce((sum, b) => sum + b.paid, 0);
+    const totalToPay = transformedBookings.reduce((sum, b) => sum + b.toPay, 0);
+    const paidBookings = transformedBookings.filter(b => b.paymentStatus === "Paid").length;
+    const unpaidBookings = transformedBookings.filter(b => b.paymentStatus === "Unpaid").length;
+    const partialBookings = transformedBookings.filter(b => b.paymentStatus === "Partial").length;
+
     const summary = {
-      totalPaid: transformedBookings.reduce((sum, b) => sum + b.paid, 0),
-      totalToPay: transformedBookings.reduce((sum, b) => sum + b.toPay, 0),
+      totalPaid,
+      totalToPay,
       totalBookings: transformedBookings.length,
-      paidBookings: transformedBookings.filter(b => b.paid >= b.grandTotal).length,
-      unpaidBookings: transformedBookings.filter(b => b.paid === 0).length,
-      partialBookings: transformedBookings.filter(b => b.paid > 0 && b.paid < b.grandTotal).length
+      paidBookings,
+      unpaidBookings,
+      partialBookings,
+      grandTotal: totalPaid + totalToPay,
+      paymentBreakdown: {
+        fullyPaid: paidBookings,
+        partiallyPaid: partialBookings,
+        unpaid: unpaidBookings
+      }
     };
+
+    // Format dates for response message
+    const formatDateForMessage = (dateStr) => {
+      const [day, month, year] = dateStr.split("-");
+      return `${day}-${month}-${year}`;
+    };
+
     res.status(200).json({
-      message: `Bookings from ${fromDate} to ${toDate}`,
-      summary: {
-        ...summary,
-        grandTotal: summary.totalPaid + summary.totalToPay,
-        paymentBreakdown: {
-          fullyPaid: summary.paidBookings,
-          partiallyPaid: summary.partialBookings,
-          unpaid: summary.unpaidBookings
-        }
-      },
+      message: `Bookings from ${formatDateForMessage(fromDate)} to ${formatDateForMessage(toDate)}`,
+      summary,
       bookings: transformedBookings
     });
   } catch (error) {
@@ -1018,7 +1179,8 @@ function getEmptyTotals() {
     centralTax: 0,
     stateTax: 0,
     cessAmount: 0,
-    invoiceAmount: 0
+    invoiceAmount: 0,
+    billtyAmount: 20,
   };
 }
 
@@ -1033,6 +1195,7 @@ export const getCADetailsSummary = async (req, res) => {
     }
 
     const baseQuery = { isDelivered: true };
+
     // Resolve pickup (startStation)
     if (pickup) {
       const startStationDoc = await Station.findOne({
@@ -1043,6 +1206,7 @@ export const getCADetailsSummary = async (req, res) => {
       }
       baseQuery.startStation = startStationDoc._id;
     }
+
     // Resolve drop (endStation)
     if (drop) {
       const endStationDoc = await Station.findOne({
@@ -1053,27 +1217,86 @@ export const getCADetailsSummary = async (req, res) => {
       }
       baseQuery.endStation = endStationDoc._id;
     }
-    // Date range
+
+    // FIXED: Handle both "YYYY-MM-DD" and "DD-MM-YYYY" formats
     const dateFilter = {};
     if (fromDate) {
-      const from = new Date(fromDate);
-      from.setHours(0, 0, 0, 0);
+      let from;
+
+      // Check if date is in "YYYY-MM-DD" format (like "2025-10-30")
+      if (fromDate.includes('-') && fromDate.split('-')[0].length === 4) {
+        // Parse as "YYYY-MM-DD"
+        const [year, month, day] = fromDate.split('-');
+        from = new Date(year, month - 1, day, 0, 0, 0, 0);
+      } else {
+        // Parse as "DD-MM-YYYY" 
+        const [day, month, year] = fromDate.split('-');
+        from = new Date(year, month - 1, day, 0, 0, 0, 0);
+      }
+
+      if (isNaN(from.getTime())) {
+        return res.status(400).json({
+          message: `Invalid fromDate format: ${fromDate}. Use YYYY-MM-DD or DD-MM-YYYY format.`,
+          receivedFormat: fromDate
+        });
+      }
       dateFilter.$gte = from;
+      console.log(`📅 From Date: ${fromDate} -> ${from} (UTC: ${from.toISOString()})`);
     }
+
     if (toDate) {
-      const toD = new Date(toDate);
-      toD.setHours(23, 59, 59, 999);
+      let toD;
+
+      // Check if date is in "YYYY-MM-DD" format (like "2025-11-01")
+      if (toDate.includes('-') && toDate.split('-')[0].length === 4) {
+        // Parse as "YYYY-MM-DD"
+        const [year, month, day] = toDate.split('-');
+        toD = new Date(year, month - 1, day, 23, 59, 59, 999);
+      } else {
+        // Parse as "DD-MM-YYYY"
+        const [day, month, year] = toDate.split('-');
+        toD = new Date(year, month - 1, day, 23, 59, 59, 999);
+      }
+
+      if (isNaN(toD.getTime())) {
+        return res.status(400).json({
+          message: `Invalid toDate format: ${toDate}. Use YYYY-MM-DD or DD-MM-YYYY format.`,
+          receivedFormat: toDate
+        });
+      }
       dateFilter.$lte = toD;
+      console.log(`📅 To Date: ${toDate} -> ${toD} (UTC: ${toD.toISOString()})`);
     }
+
     if (Object.keys(dateFilter).length > 0) {
       baseQuery.bookingDate = dateFilter;
     }
 
     console.log("👉 Final baseQuery:", JSON.stringify(baseQuery, null, 2));
 
+    // Debug: Check what dates exist in database for the search range
+    const dateDebug = await Booking.find({
+      isDelivered: true,
+      bookingDate: dateFilter
+    }).limit(5).select('bookingDate bookingId startStation endStation').lean();
+
+    console.log("🔍 Deliveries in search range:", dateDebug.map(b => ({
+      bookingId: b.bookingId,
+      bookingDate: b.bookingDate,
+      iso: b.bookingDate?.toISOString(),
+      startStation: b.startStation,
+      endStation: b.endStation
+    })));
+
     // First check if any matching delivered bookings exist
     const anyDeliveries = await Booking.find(baseQuery).limit(1);
     if (anyDeliveries.length === 0) {
+      // Check if there are any deliveries in the date range (ignoring station filters)
+      const deliveriesInDateRange = await Booking.find({
+        isDelivered: true,
+        bookingDate: dateFilter
+      }).limit(5).select('bookingId startStation endStation').populate('startStation endStation');
+
       return res.status(200).json(
         new ApiResponse(200, {
           summary: [],
@@ -1081,10 +1304,17 @@ export const getCADetailsSummary = async (req, res) => {
           filters: { pickup, drop, fromDate, toDate },
           diagnostics: {
             message: "No delivered bookings found matching pickup/drop/date criteria",
+            queryUsed: baseQuery,
+            dateRange: dateFilter,
+            deliveriesInDateRange: deliveriesInDateRange.map(d => ({
+              bookingId: d.bookingId,
+              startStation: d.startStation?.stationName || d.startStation,
+              endStation: d.endStation?.stationName || d.endStation
+            })),
             potentialIssues: [
-              "Bookings may not be marked as delivered",
               "Station names may not match exactly",
-              "No bookings exist for the date range"
+              "Bookings may not be marked as delivered",
+              "Date range might not include any delivered bookings"
             ]
           }
         }, "No matching deliveries found")
@@ -1110,15 +1340,38 @@ export const getCADetailsSummary = async (req, res) => {
           filters: { pickup, drop, fromDate, toDate },
           diagnostics: {
             message: "Deliveries found but no tax data present",
+            foundDeliveries: anyDeliveries.length,
             suggestion: "Check if CGST/SGST/IGST values are being recorded properly"
           }
         }, "No tax-eligible deliveries found")
       );
     }
 
-    // Aggregation placeholder (update as per your needs)
+    // Aggregation with proper station lookups
     const summary = await Booking.aggregate([
       { $match: taxQuery },
+      {
+        $lookup: {
+          from: "stations",
+          localField: "startStation",
+          foreignField: "_id",
+          as: "startStationInfo"
+        }
+      },
+      {
+        $lookup: {
+          from: "stations",
+          localField: "endStation",
+          foreignField: "_id",
+          as: "endStationInfo"
+        }
+      },
+      {
+        $addFields: {
+          startStationName: { $arrayElemAt: ["$startStationInfo.stationName", 0] },
+          endStationName: { $arrayElemAt: ["$endStationInfo.stationName", 0] }
+        }
+      },
       {
         $group: {
           _id: null,
@@ -1133,12 +1386,14 @@ export const getCADetailsSummary = async (req, res) => {
             $addToSet: {
               $concat: [
                 "$firstName",
-                { $cond: [{ $gt: [{ $strLenCP: "$middleName" }, 0] }, { $concat: [" ", "$middleName"] }, ""] },
+                { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ["$middleName", ""] } }, 0] }, { $concat: [" ", "$middleName"] }, ""] },
                 " ",
                 "$lastName"
               ]
             }
-          }
+          },
+          startStations: { $addToSet: "$startStationName" },
+          endStations: { $addToSet: "$endStationName" }
         }
       },
       {
@@ -1174,6 +1429,8 @@ export const getCADetailsSummary = async (req, res) => {
           senderNames: 1,
           senderGst: 1,
           customerNames: 1,
+          startStations: 1,
+          endStations: 1,
           particulars: { $literal: "Total" },
           gst: { $literal: "" },
           startStation: { $literal: pickup || "" },
@@ -1186,7 +1443,11 @@ export const getCADetailsSummary = async (req, res) => {
     const result = {
       summary,
       totals: summary[0] || getEmptyTotals(),
-      filters: { pickup, drop, fromDate, toDate }
+      filters: { pickup, drop, fromDate, toDate },
+      diagnostics: {
+        totalMatchingRecords: anyDeliveries.length,
+        dateRange: dateFilter
+      }
     };
 
     res.status(200).json(new ApiResponse(200, result, "CA Details summary fetched successfully"));
@@ -1205,177 +1466,273 @@ export const generateInvoiceByCustomer = async (req, res) => {
     if (!customerName || !fromDate || !toDate) {
       return res.status(400).json({
         message: "customerName, fromDate, and toDate are required",
-        data: { customerName, fromDate, toDate }
-      });
-    }
-    const cleanName = customerName
-      .trim()
-      .replace(/\s+/g, "\\s+"); // collapse spaces/tabs in regex
-
-    const customer = await Customer.findOne({
-      $expr: {
-        $regexMatch: {
-          input: {
-            $trim: {
-              input: {
-                $concat: [
-                  "$firstName", " ",
-                  { $ifNull: ["$middleName", ""] }, " ",
-                  "$lastName"
-                ]
-              }
-            }
-          },
-          regex: cleanName,
-          options: "i"
-        }
-      }
-    });
-
-
-
-
-    if (!customer) {
-      return res.status(404).json({
-        message: "Customer not found",
-        customerSearchTerm: customerName,
       });
     }
 
-    // Step 2: Find Bookings
     const from = new Date(fromDate);
     const to = new Date(toDate);
-    to.setHours(23, 59, 59, 999); // end of day
+    to.setHours(23, 59, 59, 999);
 
+    // ✅ Fetch all delivered bookings (either sender or receiver)
     const bookings = await Booking.find({
-      customerId: customer._id,
+      $or: [
+        { receiverName: { $regex: customerName, $options: "i" } },
+        { senderName: { $regex: customerName, $options: "i" } },
+      ],
       bookingDate: { $gte: from, $lte: to },
+      isDelivered: true,
     })
-      .populate('startStation') // <-- so PDF gets stationName, address, gst, contact
+      .populate("startStation")
+      .populate("customerId")
       .sort({ bookingDate: 1 });
 
-
     if (!bookings.length) {
-      // Fetch all bookings for debugging in API response
-      const allBookings = await Booking.find({ customerId: customer._id }).sort({ bookingDate: 1 });
-
       return res.status(404).json({
-        message: "No bookings found in the given date range",
-        customer: {
-          id: customer._id,
-          name: `${customer.firstName} ${customer.lastName}`,
-        },
-        requestedDateRange: {
-          from: from.toISOString(),
-          to: to.toISOString(),
-        },
-        availableBookingsDates: allBookings.map(b => ({
-          id: b._id,
-          date: b.bookingDate,
-          billTotal: b.billTotal,
-          receiverName: b.receiverName
-        })),
+        message: "No delivered bookings found for this party in the given date range",
+        searchedName: customerName,
       });
     }
-    const headerBooking = bookings?.[0];
-    const stationName = headerBooking?.startStation?.stationName || "NA";
 
-    // ✅ Generate invoice number per station
-    const invoiceNo = await generateInvoiceNumber(stationName);
+    // ✅ Step 1: Determine billing for each booking
+    const filteredBookings = bookings.map((booking) => {
+      const hasToPayItem = booking.items.some((i) => i.toPay === "toPay");
+      const hasPaidItem = booking.items.some((i) => i.toPay === "paid");
+
+      let billingName = booking.receiverName;
+      let billingGst = booking.receiverGgt;
+      let billingAddress = booking.receiverLocality;
+      let billingType = "receiver (toPay)";
+
+      if (hasPaidItem && !hasToPayItem) {
+        billingName = booking.senderName;
+        billingGst = booking.senderGgt;
+        billingAddress = booking.senderLocality;
+        billingType = "sender (paid)";
+      }
+
+      return {
+        ...booking.toObject(),
+        billingName,
+        billingGst,
+        billingAddress,
+        billingType,
+      };
+    });
+
+    // ✅ Step 2: Filter to only include bookings where customer is the billing party
+    const customerBookings = filteredBookings.filter(
+      (b) => b.billingName.toLowerCase() === customerName.toLowerCase()
+    );
+
+    if (!customerBookings.length) {
+      return res.status(404).json({
+        message: "No bookings found where this party is the billing party",
+        searchedName: customerName,
+        availableBillingParties: [...new Set(filteredBookings.map(b => b.billingName))]
+      });
+    }
+
+    // ✅ Step 3: Debug log
+    console.log("Final billing information for PDF:");
+    customerBookings.forEach((b) => {
+      console.log(`Booking ${b.bookingId}:`);
+      console.log(`  - Billing Name: ${b.billingName}`);
+      console.log(`  - Billing Type: ${b.billingType}`);
+      console.log(`  - Sender: ${b.senderName}`);
+      console.log(`  - Receiver: ${b.receiverName}`);
+    });
+
+    // ✅ Step 4: Pick reference booking for header details
+    const headerBooking = customerBookings[0];
+
+    // ✅ Step 5: Define header details
+    const billingName = headerBooking.billingName;
+    const billingGst = headerBooking.billingGst;
+    const billingAddress = headerBooking.billingAddress;
+    const billingState = headerBooking.toState || headerBooking.fromState || "N/A";
+
+    console.log("📦 INVOICE HEADER:");
+    console.log({
+      billingName,
+      billingGst,
+      billingAddress,
+      billingState,
+    });
+
+    // ✅ Step 6: Generate invoice number & update bookings
+    const invoiceNo = await generateInvoiceNumber(
+      headerBooking?.startStation?.stationName || "DEL"
+    );
     const billDate = new Date();
+
     await Booking.updateMany(
-      { _id: { $in: bookings.map(b => b._id) } },
+      { _id: { $in: customerBookings.map((b) => b._id) } },
       { $set: { invoiceNo, billDate } }
     );
-    // Step 3: Generate PDF
-    const pdfBuffer = await generateInvoicePDF(customer, bookings, invoiceNo);
+
+    // ✅ Step 7: Generate PDF
+    const pdfBuffer = await generateInvoicePDF({
+      bookings: customerBookings,
+      invoiceNo,
+      billDate,
+      billingName,
+      billingGst,
+      billingAddress,
+      billingState,
+    });
 
     res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${customer.firstName}_Invoice.pdf"`,
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${customerName}_Invoice.pdf"`,
     });
 
     res.send(pdfBuffer);
   } catch (err) {
-    res.status(500).json({
-      message: err.message || "Server Error",
-      error: true
-    });
+    console.error("❌ Error generating invoice:", err);
+    res.status(500).json({ message: err.message || "Server Error" });
   }
 };
 
+
+
 export const getAllCustomersPendingAmounts = async (req, res) => {
   try {
-    const customerPayments = await Booking.aggregate([
-      {
-        $group: {
-          _id: "$customerId",
-          totalGrandTotal: { $sum: "$grandTotal" },
-          totalAmountPaid: { $sum: { $ifNull: ["$paidAmount", 0] } }, // handle missing paidAmount
-          bookingCount: { $sum: 1 },
-          unpaidBookings: {
-            $sum: {
-              $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0]
-            }
+    // Get all bookings with customer data
+    const bookings = await Booking.find({ isDeleted: { $ne: true } })
+      .populate('customerId')
+      .lean();
+
+    // Process bookings to calculate payments based on items
+    const customerMap = new Map();
+
+    bookings.forEach(booking => {
+      const customerId = booking.customerId?._id || booking.customerId;
+      if (!customerId) return; // Skip if no customer ID
+
+      if (!customerMap.has(customerId)) {
+        const customer = booking.customerId || {};
+        customerMap.set(customerId, {
+          customerId,
+          name: `${customer.firstName || ''} ${customer.middleName || ''} ${customer.lastName || ''}`.trim() || 'Unknown Customer',
+          email: customer.emailId || 'N/A',
+          contact: customer.contactNumber || 'N/A',
+          totalBookings: 0,
+          unpaidBookings: 0,
+          fullyPaidBookings: 0,
+          partiallyPaidBookings: 0,
+          totalAmount: 0,
+          totalPaid: 0,
+          pendingAmount: 0,
+          bookings: [] // Store individual bookings for debugging
+        });
+      }
+
+      const customerData = customerMap.get(customerId);
+      const grandTotal = booking.grandTotal || 0;
+
+      // Calculate paid amount based on items' toPay status
+      let paidAmount = 0;
+      let paymentStatus = "Unpaid";
+
+      if (booking.items && Array.isArray(booking.items)) {
+        const totalItemsAmount = booking.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+        const paidItemsAmount = booking.items.reduce((sum, item) =>
+          item.toPay === 'paid' ? sum + (Number(item.amount) || 0) : sum, 0);
+
+        if (paidItemsAmount > 0) {
+          if (paidItemsAmount >= totalItemsAmount && totalItemsAmount > 0) {
+            // All items are paid
+            paidAmount = grandTotal;
+            paymentStatus = "Paid";
+          } else {
+            // Some items are paid - calculate proportional amount
+            const paidRatio = totalItemsAmount > 0 ? paidItemsAmount / totalItemsAmount : 0;
+            paidAmount = Math.round(grandTotal * paidRatio);
+            paymentStatus = "Partial";
           }
+        } else {
+          // No items are paid, use booking-level payment
+          paidAmount = booking.paidAmount || 0;
+          paymentStatus = paidAmount > 0 ? "Partial" : "Unpaid";
         }
-      },
-      {
-        $lookup: {
-          from: "customers",
-          localField: "_id",
-          foreignField: "_id",
-          as: "customer"
-        }
-      },
-      { $unwind: "$customer" },
-      {
-        $project: {
-          _id: 0,
-          customerId: "$_id",
-          name: {
-            $concat: [
-              "$customer.firstName",
-              " ",
-              { $ifNull: ["$customer.middleName", ""] },
-              {
-                $cond: [
-                  { $gt: [{ $strLenCP: { $ifNull: ["$customer.middleName", ""] } }, 0] },
-                  " ",
-                  ""
-                ]
-              },
-              "$customer.lastName"
-            ]
-          },
-          email: "$customer.emailId",
-          contact: "$customer.contactNumber",
-          totalBookings: "$bookingCount",
-          unpaidBookings: "$unpaidBookings",
-          totalAmount: "$totalGrandTotal",
-          totalPaid: "$totalAmountPaid",
-          pendingAmount: { $subtract: ["$totalGrandTotal", "$totalAmountPaid"] }
-        }
-      },
-      { $match: { pendingAmount: { $gt: 0 } } },
-      { $sort: { pendingAmount: -1 } }
-    ]);
+      } else {
+        // No items array, use booking-level payment
+        paidAmount = booking.paidAmount || 0;
+        paymentStatus = paidAmount >= grandTotal ? "Paid" :
+          paidAmount > 0 ? "Partial" : "Unpaid";
+      }
+
+      const pendingForBooking = Math.max(grandTotal - paidAmount, 0);
+
+      // Update customer totals
+      customerData.totalBookings++;
+      customerData.totalAmount += grandTotal;
+      customerData.totalPaid += paidAmount;
+      customerData.pendingAmount += pendingForBooking;
+
+      // Update booking counts based on payment status
+      if (paymentStatus === "Paid") {
+        customerData.fullyPaidBookings++;
+      } else if (paymentStatus === "Partial") {
+        customerData.partiallyPaidBookings++;
+        customerData.unpaidBookings++; // Partially paid still has unpaid amount
+      } else {
+        customerData.unpaidBookings++;
+      }
+
+      // Store booking details for debugging
+      customerData.bookings.push({
+        bookingId: booking.bookingId,
+        grandTotal,
+        paidAmount,
+        pendingAmount: pendingForBooking,
+        paymentStatus,
+        items: booking.items?.map(item => ({
+          receiptNo: item.receiptNo,
+          amount: item.amount,
+          toPay: item.toPay
+        }))
+      });
+    });
+
+    // Convert map to array and filter customers with pending amounts
+    const customerPayments = Array.from(customerMap.values())
+      .filter(customer => customer.pendingAmount > 0)
+      .sort((a, b) => b.pendingAmount - a.pendingAmount);
+
+    // Calculate summary
+    const totalPendingAmount = customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0);
+    const customersWithUnpaidBookings = customerPayments.filter(c => c.unpaidBookings > 0).length;
+    const totalUnpaidBookings = customerPayments.reduce((sum, c) => sum + c.unpaidBookings, 0);
+    const totalFullyPaidBookings = customerPayments.reduce((sum, c) => sum + c.fullyPaidBookings, 0);
+    const totalPartiallyPaidBookings = customerPayments.reduce((sum, c) => sum + c.partiallyPaidBookings, 0);
 
     const summary = {
       totalCustomers: customerPayments.length,
-      totalPendingAmount: customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0),
-      customersWithUnpaidBookings: customerPayments.filter(c => c.unpaidBookings > 0).length,
-      averagePendingPerCustomer:
-        customerPayments.length > 0
-          ? customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0) / customerPayments.length
-          : 0
+      totalPendingAmount: Math.round(totalPendingAmount * 100) / 100,
+      customersWithUnpaidBookings,
+      totalUnpaidBookings,
+      totalFullyPaidBookings,
+      totalPartiallyPaidBookings,
+      averagePendingPerCustomer: customerPayments.length > 0
+        ? Math.round((totalPendingAmount / customerPayments.length) * 100) / 100
+        : 0,
+      totalBookings: customerPayments.reduce((sum, c) => sum + c.totalBookings, 0),
+      totalAmount: customerPayments.reduce((sum, c) => sum + c.totalAmount, 0),
+      totalPaid: customerPayments.reduce((sum, c) => sum + c.totalPaid, 0)
     };
+
+    // Remove bookings array from response to keep it clean
+    const cleanCustomerPayments = customerPayments.map(customer => {
+      const { bookings, ...cleanCustomer } = customer;
+      return cleanCustomer;
+    });
 
     res.status(200).json({
       success: true,
       summary,
-      customers: customerPayments,
-      message: `Found ${customerPayments.length} customers with pending payments`
+      customers: cleanCustomerPayments,
+      message: `Found ${customerPayments.length} customers with pending payments totaling ₹${summary.totalPendingAmount}`
     });
 
   } catch (err) {
@@ -1387,6 +1744,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
     });
   }
 };
+
 
 export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   const { customerId } = req.params;
@@ -1637,3 +1995,4 @@ export const getIncomingBookings = async (req, res) => {
     res.status(500).json({ message: err.message || "Server error" });
   }
 };
+

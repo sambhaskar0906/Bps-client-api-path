@@ -21,6 +21,7 @@ import {
   InputAdornment,
   useTheme,
   Button,
+  Checkbox,
 } from "@mui/material";
 import {
   CancelScheduleSend as CancelScheduleSendIcon,
@@ -44,6 +45,7 @@ import { Snackbar, Alert } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import QSlipModal from "../../../Components/QSlipModal";
+import { finalizeDelivery } from '../../../features/delivery/deliverySlice';
 function descendingComparator(a, b, orderBy) {
   if (b[orderBy] < a[orderBy]) return -1;
   if (b[orderBy] > a[orderBy]) return 1;
@@ -66,6 +68,7 @@ function stableSort(array, comparator) {
 }
 
 const headCells = [
+  { id: "active", label: "Active Delivery", sortable: false },
   { id: "sno", label: "S.No", sortable: false },
   { id: "bookingId", label: "Order By", sortable: true },
   { id: "quotationDate", label: "Date", sortable: true },
@@ -246,6 +249,23 @@ const QuotationCard = () => {
   const handleView = (bookingId) => navigate(`/viewquotation/${bookingId}`);
   const handleUpdate = (bookingId) => navigate(`/updatequotation/${bookingId}`);
 
+  const handleActiveChange = (orderId, isActive) => {
+    if (isActive) {
+      if (window.confirm("Are you sure you want to finalize this delivery?")) {
+        dispatch(finalizeDelivery(orderId))
+          .unwrap()
+          .then(() => {
+            alert("Delivery finalized successfully!");
+            dispatch(fetchActiveBooking());
+          })
+          .catch((error) => {
+            alert(`Failed to finalize delivery: ${error}`);
+          });
+      }
+    } else {
+      alert("You cannot unfinalize a delivery once completed.");
+    }
+  };
 
   return (
     <Box sx={{ p: 2 }}>
@@ -338,26 +358,30 @@ const QuotationCard = () => {
           <Table>
             <TableHead sx={{ backgroundColor: "#1565c0" }}>
               <TableRow>
-                {displayHeadCells.map((headCell) => (
-                  <TableCell
-                    key={headCell.id}
-                    sx={{ fontWeight: "bold", color: "#fff" }}
-                    sortDirection={orderBy === headCell.id ? order : false}
-                  >
-                    {headCell.sortable ? (
-                      <TableSortLabel
-                        active={orderBy === headCell.id}
-                        direction={orderBy === headCell.id ? order : "asc"}
-                        onClick={() => handleRequestSort(headCell.id)}
-                        sx={{ color: "#fff", "&.Mui-active": { color: "#fff" } }}
-                      >
-                        {headCell.label}
-                      </TableSortLabel>
-                    ) : (
-                      headCell.label
-                    )}
-                  </TableCell>
-                ))}
+                {displayHeadCells.filter((headCell) => {
+                  if (headCell.id === "active" && selectedList !== "active") return false;
+                  return true;
+                })
+                  .map((headCell) => (
+                    <TableCell
+                      key={headCell.id}
+                      sx={{ fontWeight: "bold", color: "#fff" }}
+                      sortDirection={orderBy === headCell.id ? order : false}
+                    >
+                      {headCell.sortable ? (
+                        <TableSortLabel
+                          active={orderBy === headCell.id}
+                          direction={orderBy === headCell.id ? order : "asc"}
+                          onClick={() => handleRequestSort(headCell.id)}
+                          sx={{ color: "#fff", "&.Mui-active": { color: "#fff" } }}
+                        >
+                          {headCell.label}
+                        </TableSortLabel>
+                      ) : (
+                        headCell.label
+                      )}
+                    </TableCell>
+                  ))}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -389,6 +413,16 @@ const QuotationCard = () => {
                     ) : (
                       <>
 
+                        {selectedList === "active" && (
+                          <TableCell>
+                            <Checkbox
+                              checked={row.isActive || false}
+                              disabled={row.isFinalized}
+                              onChange={(e) => handleActiveChange(row.orderId, e.target.checked)}
+                              color="primary"
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.orderBy}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.Date}</TableCell>
@@ -397,6 +431,8 @@ const QuotationCard = () => {
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row["Name (Drop)"]}</TableCell>
                         <TableCell>{row.drop}</TableCell>
                         <TableCell>{row.Contact}</TableCell>
+
+
                         <TableCell>
                           <Box sx={{ display: "flex", gap: 1 }}>
                             <IconButton size="small" color="primary" onClick={() => handleView(row['Booking ID'])} title="View">
@@ -429,8 +465,6 @@ const QuotationCard = () => {
                               <ReceiptIcon fontSize="small" />
                             </IconButton>
                           </Box>
-
-
                         </TableCell>
                       </>
                     )}

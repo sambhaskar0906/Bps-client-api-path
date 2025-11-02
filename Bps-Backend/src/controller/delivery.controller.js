@@ -10,12 +10,35 @@ import { Customer } from '../model/customer.model.js';
 import { Driver } from "../model/driver.model.js";
 import nodemailer from 'nodemailer';
 
-// Helper function to generate Order ID
+
 const generateOrderId = () => {
   const prefix = "BHA";
-  const randomNumber = Math.floor(1000 + Math.random() * 9000); // Random 4 digit number
+  const randomNumber = Math.floor(1000 + Math.random() * 9000);
   const suffix = "DELIVERY";
   return `${prefix}${randomNumber}${suffix}`;
+};
+const formatVehicleDetails = (vehicles) => {
+  return vehicles.map((vehicle, index) => ({
+    sNo: index + 1,
+    vehicleId: vehicle.vehicleId,
+    location: vehicle.currentLocation,
+    ownedBy: vehicle.ownedBy,
+    vehicleModel: vehicle.vehicleModel,
+  }));
+};
+const formatDriverList = (drivers) => {
+
+  return drivers.map((driver, index) => ({
+    sNo: index + 1,
+    driverId: driver.driverId,
+    name: `${driver.firstName} ${driver.middleName ? driver.middleName + ' ' : ''}${driver.lastName}`,
+    contactNumber: driver.contactNumber,
+    actions: [
+      { name: "View", icon: "view-icon", action: `/api/drivers/${driver.driverId}` },
+      { name: "Edit", icon: "edit-icon", action: `/api/drivers/edit/${driver.driverId}` },
+      { name: "Delete", icon: "delete-icon", action: `/api/drivers/delete/${driver.driverId}` }
+    ]
+  }));
 };
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -24,69 +47,122 @@ const transporter = nodemailer.createTransport({
     pass: process.env.app_pass
   }
 });
-// Refactored Helper function to populate vehicle and booking info
-const populateVehicleAndBooking = (query) => {
-  return query.populate({
-    path: "bookingId",
-    select: "senderName receiverName startStation endStation",
-    populate: {
-      path: "startStation endStation",
-      select: "stationName",
-    },
-  }).populate("vehicleId", "vehicleName"); // Populate Vehicle information with vehicleName
-};
-export const updateDriverAndVehicleAvailability = async (driverName, vehicleId) => {
-  const activeDriverDeliveries = await Delivery.find({
-    driverName,
-    status: { $ne: "Completed" },
+
+
+
+export const getAvailableDrivers = asyncHandler(async (req, res) => {
+  let deliveryType = req.query.type; // "Booking" or "Quotation"
+
+  const allDrivers = await Driver.find({
+    ...req.roleQueryFilter,
+    isBlacklisted: false,
   });
 
-  const activeVehicleDeliveries = await Delivery.find({
-    vehicleModel: vehicleId, // vehicleModel actually stores vehicle ID
-    status: { $ne: "Completed" },
+  const activeDeliveries = await Delivery.find({
+    deliveryType,
+    status: { $nin: ["Completed", "Final Delivery"] },
+  }).select("driverId");
+
+  const activeDriverIds = new Set(activeDeliveries.map(d => d.driverId));
+  const recentDelivery = await Delivery.findOne().sort({ createdAt: -1 }).lean();
+  console.log("Recent Delivery:", recentDelivery);
+
+  console.log("Active driver IDs:", activeDriverIds);
+  console.log("All driver IDs:", allDrivers.map(d => d.driverId));
+  console.log("Delivery type received:", deliveryType);
+
+  const filteredDrivers = allDrivers.filter(driver =>
+    !activeDriverIds.has(driver.driverId)
+  );
+
+  const driverList = formatDriverList(filteredDrivers);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Available drivers fetched successfully", driverList));
+});
+
+
+
+export const getAvailableVehicles = asyncHandler(async (req, res) => {
+  let deliveryType = req.query.type;
+  deliveryType = deliveryType === "Quotation" ? "Quotation" : "Booking";
+
+  const allVehicles = await Vehicle.find({
+    ...req.vehicleQueryFilter,
+    isActive: true,
+    isBlacklisted: false,
+  })
+    .select('_id vehicleId currentLocation ownedBy vehicleModel')
+    .lean();
+
+  const activeDeliveries = await Delivery.find({
+    deliveryType,
+    status: { $nin: ["Completed", "Final Delivery"] },
+  }).select('vehicleModel');
+
+  const activeVehicleIds = activeDeliveries.map(d => d.vehicleModel.toString());
+
+  console.log("Active vehicle IDs:", activeVehicleIds);
+  console.log("All vehicles:", allVehicles.map(v => v._id.toString()));
+
+  const filteredVehicles = allVehicles.filter(vehicle => {
+    return !activeVehicleIds.includes(vehicle._id.toString()); // match by _id
   });
 
-  if (activeDriverDeliveries.length === 0) {
-    await Driver.updateOne({ firstName: driverName }, { isAvailable: true });
-  }
+  const result = formatVehicleDetails(filteredVehicles);
 
-  if (activeVehicleDeliveries.length === 0) {
-    await Vehicle.updateOne({ _id: vehicleId }, { isAvailable: true });
-  }
-};
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Available vehicles fetched successfully", { availableVehicles: result }));
+});
 
-// Assign a delivery to a booking
-// Assign a delivery to a booking or quotation
+
+
+
 export const assignDelivery = asyncHandler(async (req, res) => {
-  console.log("req", req.body);
-  const { bookingIds = [], quotationIds = [], driverName, vehicleModel } = req.body;
+  console.log("Req", req.body);
+  const { bookingIds = [], quotationIds = [], driverId, vehicleModel } = req.body;
 
-  if ((!bookingIds.length && !quotationIds.length) || !driverName || !vehicleModel) {
-    throw new ApiError(400, "Booking or Quotation IDs, Driver Name, and Vehicle Model are required.");
+  if ((!bookingIds.length && !quotationIds.length) || !driverId || !vehicleModel) {
+    throw new ApiError(400, "Booking or Quotation IDs, Driver ID, and Vehicle Model are required.");
   }
 
   const vehicle = await Vehicle.findOne({ vehicleModel });
   if (!vehicle) throw new ApiError(404, "Vehicle not found with this model.");
+
   const vehicleId = vehicle._id;
+  const driver = await Driver.findOne({ driverId });
+  if (!driver) throw new ApiError(404, "Driver not found.");
 
   let existingDriverDelivery = null;
   let existingVehicleDelivery = null;
 
   if (bookingIds.length) {
     existingDriverDelivery = await Delivery.findOne({
-      driverName, deliveryType: "Booking", status: { $nin: ["Completed", "Final Delivery"] },
+      driverId,
+      deliveryType: "Booking",
+      status: { $nin: ["Completed", "Final Delivery"] },
     });
+
     existingVehicleDelivery = await Delivery.findOne({
-      vehicleModel: vehicleId, deliveryType: "Booking", status: { $nin: ["Completed", "Final Delivery"] },
+      vehicleModel: vehicleId,
+      deliveryType: "Booking",
+      status: { $nin: ["Completed", "Final Delivery"] },
     });
   }
 
   if (quotationIds.length) {
     existingDriverDelivery = await Delivery.findOne({
-      driverName, deliveryType: "Quotation", status: { $nin: ["Completed", "Final Delivery"] },
+      driverId,
+      deliveryType: "Quotation",
+      status: { $nin: ["Completed", "Final Delivery"] },
     });
+
     existingVehicleDelivery = await Delivery.findOne({
-      vehicleModel: vehicleId, deliveryType: "Quotation", status: { $nin: ["Completed", "Final Delivery"] },
+      vehicleModel: vehicleId,
+      deliveryType: "Quotation",
+      status: { $nin: ["Completed", "Final Delivery"] },
     });
   }
 
@@ -100,20 +176,19 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     const booking = await Booking.findOne({ bookingId })
       .populate('startStation endStation', 'stationName')
       .lean();
+
     if (!booking) continue;
 
     const alreadyAssigned = await Delivery.findOne({ bookingId });
     if (alreadyAssigned) continue;
 
-    // 🟩 Save both activeDelivery and orderId inside Booking
-
-
+    await Booking.updateOne({ bookingId }, { activeDelivery: true });
 
     const deliveryObj = {
       orderId: generateOrderId(),
       bookingId,
       deliveryType: "Booking",
-      driverName,
+      driverId, // ✅ updated
       vehicleModel: vehicleId,
       status: "Pending",
       fromName: booking.senderName || 'N/A',
@@ -134,13 +209,9 @@ export const assignDelivery = asyncHandler(async (req, res) => {
       sno: responseData.length + 1,
       orderBy: booking.createdByRole || 'N/A',
       date: booking.bookingDate?.toISOString().slice(0, 10) || 'N/A',
-      fromName: booking.senderName || 'N/A',
-      pickup: booking.startStation?.stationName || 'N/A',
-      toName: booking.receiverName || 'N/A',
-      drop: booking.endStation?.stationName || 'N/A',
-      contact: booking.mobile || 'N/A',
     });
   }
+
   for (const quotationId of quotationIds) {
     const quotation = await Quotation.findOne({ bookingId: quotationId });
     if (!quotation) continue;
@@ -148,11 +219,13 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     const alreadyAssigned = await Delivery.findOne({ quotationId });
     if (alreadyAssigned) continue;
 
+    await Quotation.updateOne({ bookingId: quotationId }, { activeDelivery: true });
+
     const deliveryObj = {
       orderId: generateOrderId(),
       quotationId,
       deliveryType: "Quotation",
-      driverName,
+      driverId, // ✅ updated
       vehicleModel: vehicleId,
       status: "Pending",
       fromName: quotation.senderName || 'N/A',
@@ -163,6 +236,7 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     };
 
     deliveries.push(deliveryObj);
+
     responseData.push({
       ...deliveryObj,
       sno: responseData.length + 1,
@@ -191,13 +265,6 @@ export const assignDelivery = asyncHandler(async (req, res) => {
 });
 
 
-
-
-
-
-
-
-// List all Booking Deliveries
 export const listBookingDeliveries = asyncHandler(async (req, res) => {
   const deliveries = await Delivery.find({ deliveryType: "Booking", status: { $ne: "Final Delivery" } })
     .populate([
@@ -226,7 +293,6 @@ export const listBookingDeliveries = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, data, "Booking deliveries fetched successfully."));
 });
 
-// List all Quotation Deliveries
 export const listQuotationDeliveries = asyncHandler(async (req, res) => {
   const deliveries = await Delivery.find({
     deliveryType: "Quotation",
@@ -258,12 +324,8 @@ export const listQuotationDeliveries = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, data, "Quotation deliveries fetched successfully."));
 });
 
-
-
-
-// Finalize Delivery
 export const finalizeDelivery = asyncHandler(async (req, res) => {
-  const { orderId } = req.params; // Getting orderId from params
+  const { orderId } = req.params;
 
   const delivery = await Delivery.findOne({ orderId });
 
@@ -275,21 +337,55 @@ export const finalizeDelivery = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Delivery is already finalized.");
   }
 
-  // Mark as "Final Delivery"
+  // Step 1: Mark as final
   delivery.status = "Final Delivery";
   await delivery.save();
 
-  // Set activeDelivery to false for both Booking and Quotation types
+  // Step 2: Mark Booking or Quotation as completed
   if (delivery.deliveryType === "Booking" && delivery.bookingId) {
-    await Booking.updateOne({ bookingId: delivery.bookingId }, { activeDelivery: false, isDelivered: true });
+    await Booking.updateOne(
+      { bookingId: delivery.bookingId },
+      { activeDelivery: false, isDelivered: true }
+    );
   }
 
   if (delivery.deliveryType === "Quotation" && delivery.quotationId) {
-    await Quotation.updateOne({ bookingId: delivery.quotationId }, { activeDelivery: false, isDelivered: true });
+    await Quotation.updateOne(
+      { bookingId: delivery.quotationId },
+      { activeDelivery: false, isDelivered: true }
+    );
   }
 
-  // Update availability
-  await updateDriverAndVehicleAvailability(delivery.driverName, delivery.vehicleModel);
+  // Step 3: Check for other active deliveries for the same driver/vehicle
+  const activeDeliveries = await Delivery.find({
+    status: { $nin: ["Completed", "Final Delivery"] },
+    $or: [
+      { driverId: delivery.driverId },
+      { vehicleModel: delivery.vehicleModel },
+    ]
+  });
+
+  // Step 4: If no active deliveries left for driver or vehicle, mark them as available
+  const hasDriverActive = activeDeliveries.some(
+    d => d.driverId === delivery.driverId
+  );
+  const hasVehicleActive = activeDeliveries.some(
+    d => d.vehicleModel?.toString() === delivery.vehicleModel?.toString()
+  );
+
+  if (!hasDriverActive && delivery.driverId) {
+    await Driver.updateOne(
+      { driverId: delivery.driverId },
+      { isAvailable: true }
+    );
+  }
+
+  if (!hasVehicleActive && delivery.vehicleModel) {
+    await Vehicle.updateOne(
+      { _id: delivery.vehicleModel },
+      { isAvailable: true }
+    );
+  }
 
   res.status(200).json(
     new ApiResponse(200, {
@@ -298,6 +394,7 @@ export const finalizeDelivery = asyncHandler(async (req, res) => {
     }, "Delivery marked as final.")
   );
 });
+
 
 export const sendDeliverySuccessEmail = async (email, booking) => {
   const {
@@ -386,8 +483,6 @@ export const sendDeliverySuccessByOrderId = async (req, res) => {
   }
 };
 
-
-// Count Deliveries
 export const countBookingDeliveries = asyncHandler(async (req, res) => {
   const count = await Delivery.countDocuments({ deliveryType: "Booking", status: { $ne: "Final Delivery" } });
 

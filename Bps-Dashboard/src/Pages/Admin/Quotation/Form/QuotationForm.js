@@ -66,6 +66,8 @@ const initialValues = {
 
   addComment: "",
 
+  // Bilty Amount field add किया
+  biltyAmount: "20",
 
   billTotal: "",
 
@@ -533,6 +535,8 @@ const QuotationForm = () => {
                       variant="outlined"
                     />
                   </Grid>
+
+                  {/* Totals Section - Updated with Bilty Amount */}
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={3}>
                       <TextField
@@ -543,6 +547,41 @@ const QuotationForm = () => {
                         fullWidth
                       />
                     </Grid>
+
+                    {/* Bilty Amount Field Add किया - Always show 20 */}
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        name="biltyAmount"
+                        label="Bilty Amount"
+                        value="20"
+                        InputProps={{ readOnly: true }}
+                        fullWidth
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        name="billTotal"
+                        label="Bill Total"
+                        value={values.billTotal}
+                        InputProps={{ readOnly: true }}
+                        fullWidth
+                      />
+                    </Grid>
+
+                    <Grid item xs={12} sm={3}>
+                      <TextField
+                        name="sTax"
+                        label="sTax %"
+                        value={values.sTax}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          setFieldValue("sTax", isNaN(value) ? 0 : value);
+                        }}
+                        fullWidth
+                      />
+                    </Grid>
+
                     <Grid item xs={12} sm={3}>
                       <TextField
                         name="grandTotal"
@@ -552,6 +591,7 @@ const QuotationForm = () => {
                         fullWidth
                       />
                     </Grid>
+
                     <Grid item xs={12} sm={3}>
                       <TextField
                         name="roundOff"
@@ -561,24 +601,13 @@ const QuotationForm = () => {
                         fullWidth
                       />
                     </Grid>
-                    {/* <Grid item xs={12} sm={3}>
+
+                    <Grid item xs={12} sm={3}>
                       <TextField
                         name="finalTotal"
                         label="Final Total"
                         value={values.finalTotal}
                         InputProps={{ readOnly: true }}
-                        fullWidth
-                      />
-                    </Grid> */}
-                    <Grid item xs={12} sm={3}>
-                      <TextField
-                        name="sTax"
-                        label="Tax %"
-                        value={values.sTax}
-                        onChange={(e) => {
-                          const value = parseFloat(e.target.value);
-                          setFieldValue("sTax", isNaN(value) ? 0 : value);
-                        }}
                         fullWidth
                       />
                     </Grid>
@@ -680,6 +709,7 @@ const QuotationForm = () => {
     </LocalizationProvider>
   );
 };
+
 const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities }) => {
   useEffect(() => {
     if (values.fromState) {
@@ -705,19 +735,26 @@ const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities
 
   return null;
 };
+
 const EffectSyncTotal = ({ values, setFieldValue }) => {
   useEffect(() => {
+    // Bilty Amount fixed 20 रुपये - हमेशा 20 रहेगा
+    const biltyAmount = 20;
+
     // Calculate total amount from product details
     const totalAmount = values.productDetails.reduce((sum, item) => {
       return sum + (parseFloat(item.price) || 0);
     }, 0);
 
+    // ✅ CORRECTED: Bill Total = Total Amount + Bilty Amount
+    const billTotal = totalAmount + biltyAmount;
+
     // Calculate tax amount (assuming sTax is percentage)
     const taxPercentage = parseFloat(values.sTax) || 0;
-    const taxAmount = totalAmount * (taxPercentage / 100);
+    const taxAmount = billTotal * (taxPercentage / 100);
 
     // Calculate grand total before rounding
-    const grandTotal = totalAmount + taxAmount;
+    const grandTotal = billTotal + taxAmount;
 
     // Calculate rounded total and round-off
     const roundedTotal = Math.round(grandTotal);
@@ -725,6 +762,8 @@ const EffectSyncTotal = ({ values, setFieldValue }) => {
 
     // Update form values
     setFieldValue("amount", totalAmount.toFixed(2));
+    setFieldValue("biltyAmount", "20"); // हमेशा 20 set करें
+    setFieldValue("billTotal", billTotal.toFixed(2)); // Bill Total set करें
     setFieldValue("grandTotal", grandTotal.toFixed(2));
     setFieldValue("roundOff", roundOff);
     setFieldValue("finalTotal", roundedTotal.toFixed(2));

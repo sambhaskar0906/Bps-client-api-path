@@ -12,18 +12,18 @@ const deliverySchema = new mongoose.Schema({
   quotationId: { type: String }, // ✅ changed from ObjectId
   deliveryType: { type: String, enum: ["Booking", "Quotation"], required: true },
 
-  driverName: {
+  driverId: {
     type: String,
     required: true,
   },
   vehicleModel: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Vehicle", 
+    ref: "Vehicle",
     required: true,
   },
   status: {
     type: String,
-    enum: ["Pending", "Final Delivery"], 
+    enum: ["Pending", "Final Delivery"],
     default: "Pending",
   },
   fromName: String,
@@ -34,7 +34,7 @@ const deliverySchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
- 
+
 
 const Delivery = mongoose.model("Delivery", deliverySchema);
 export default Delivery;

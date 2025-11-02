@@ -30,6 +30,9 @@ const ViewBooking = () => {
     }
   }, [bookingId])
 
+  // Bilty Amount fixed 20 रुपये
+  const biltyAmount = 20;
+
   if (!booking || Object.keys(booking).length === 0) {
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
@@ -372,6 +375,18 @@ const ViewBooking = () => {
                   size="small"
                 />
               </Grid>
+
+              {/* Bilty Amount Field Add करें */}
+              <Grid size={{ xs: 6 }}>
+                <TextField
+                  label="BILTY AMOUNT"
+                  value={biltyAmount}
+                  InputProps={{ readOnly: true }}
+                  fullWidth
+                  size="small"
+                />
+              </Grid>
+
               <Grid size={{ xs: 6 }}>
                 <TextField
                   label="Bill Total"
@@ -385,7 +400,10 @@ const ViewBooking = () => {
                 <TextField
                   label="CGST%"
                   value={booking.cgst}
-                  InputProps={{ readOnly: true }}
+                  InputProps={{
+                    readOnly: true,
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                  }}
                   fullWidth
                   size="small"
                 />
@@ -394,7 +412,10 @@ const ViewBooking = () => {
                 <TextField
                   label="SGST%"
                   value={booking.sgst}
-                  InputProps={{ readOnly: true }}
+                  InputProps={{
+                    readOnly: true,
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                  }}
                   fullWidth
                   size="small"
                 />
@@ -403,7 +424,10 @@ const ViewBooking = () => {
                 <TextField
                   label="IGST%"
                   value={booking.igst}
-                  InputProps={{ readOnly: true }}
+                  InputProps={{
+                    readOnly: true,
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                  }}
                   fullWidth
                   size="small"
                 />

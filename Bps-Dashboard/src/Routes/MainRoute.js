@@ -52,6 +52,8 @@ import QcustomerUpdate from '../Pages/Admin/Qcustomer/Form/QcustomerUpdate';
 import LedgerResults from '../Pages/Admin/LedgerHistory/LedgerResults';
 import ViewQuotationBtDate from '../Components/ViewQuotationByDate';
 import Bin from '../Pages/Admin/Bin/Bin';
+import QBookingForm from '../Pages/Admin/QBooking/Qbooking';
+import BBooking from '../Pages/Admin/BBooking/Bbooking'
 
 
 const MainRoute = () => {
@@ -167,6 +169,12 @@ const MainRoute = () => {
 
                 {/* Report */}
                 <Route path="/booking-report" element={<BookingReport />} />
+
+                {/*B-Booking*/}
+                <Route path="/bbooking" element={<BBooking />} />
+
+                {/*Q-Booking*/}
+                <Route path="/qbooking" element={<QBookingForm />} />
 
                 {/* Bin */}
                 <Route path="/bin" element={<Bin />} />

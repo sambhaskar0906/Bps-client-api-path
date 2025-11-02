@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useFormik } from 'formik';
 import {
-    Box,
-    Button,
-    Grid,
-    MenuItem,
-    TextField,
-    Typography,
-    FormControl,
-    InputLabel,
-    Select,
-    FormHelperText,
-    IconButton,
-    InputAdornment
+    Box, Button, Grid, MenuItem, TextField, Typography,
+    FormControl, InputLabel, Select, FormHelperText,
+    IconButton, InputAdornment, Snackbar, Alert
 } from "@mui/material";
+
 import * as Yup from "yup";
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
@@ -41,14 +33,37 @@ const validationSchema = Yup.object({
     adminProfilePhoto: Yup.mixed().required("Required"),
 });
 
+// Helper function to decode HTML entities
+const decodeHTMLEntities = (text) => {
+    if (typeof text !== 'string') return text;
+
+    const entities = {
+        '&#39;': "'",
+        '&quot;': '"',
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&nbsp;': ' ',
+    };
+
+    return text.replace(/&#?[a-z0-9]+;/g, (match) => {
+        return entities[match] || match;
+    });
+};
+
 const UserForm = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const { states, cities } = useSelector((state) => state.location);
     const { list: stations } = useSelector((state) => state.stations);
     const [showPassword, setShowPassword] = useState(false);
+    const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "error" });
 
     const handleClickShowPassword = () => setShowPassword((prev) => !prev);
+
+    const handleCloseSnackbar = () => {
+        setSnackbar({ ...snackbar, open: false });
+    };
 
     const formik = useFormik({
         initialValues: {
@@ -74,9 +89,32 @@ const UserForm = () => {
             try {
                 await dispatch(createUsers(values)).unwrap();
                 formik.resetForm();
-                navigate('/users');
+                setSnackbar({
+                    open: true,
+                    message: "User registered successfully",
+                    severity: "success"
+                });
+                setTimeout(() => {
+                    navigate('/users');
+                }, 1500);
             } catch (error) {
-                console.log("Error while adding User", error);
+                console.log("Full error:", error);
+
+                // Handle the new consistent error structure
+                if (error?.errors) {
+                    Object.keys(error.errors).forEach((field) => {
+                        formik.setFieldError(field, error.errors[field]);
+                    });
+                }
+
+                // Decode HTML entities in the error message
+                const decodedMessage = decodeHTMLEntities(error?.message) || "Registration failed";
+
+                setSnackbar({
+                    open: true,
+                    message: decodedMessage,
+                    severity: "error"
+                });
             }
         },
     });
@@ -111,6 +149,7 @@ const UserForm = () => {
                                 name={field}
                                 value={formik.values[field]}
                                 onChange={formik.handleChange}
+                                onBlur={formik.handleBlur}
                                 error={formik.touched[field] && Boolean(formik.errors[field])}
                                 helperText={formik.touched[field] && formik.errors[field]}
                             />
@@ -118,7 +157,7 @@ const UserForm = () => {
                     ))}
 
                     {/* Station & Role */}
-                    <Grid size={{ xs: 12, md: 4 }}>
+                    <Grid item size={{ xs: 12, md: 4 }}>
                         <TextField
                             select
                             fullWidth
@@ -126,6 +165,7 @@ const UserForm = () => {
                             name="startStation"
                             value={formik.values.startStation}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.startStation && Boolean(formik.errors.startStation)}
                             helperText={formik.touched.startStation && formik.errors.startStation}
                         >
@@ -162,6 +202,7 @@ const UserForm = () => {
                             name="emailId"
                             value={formik.values.emailId}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.emailId && Boolean(formik.errors.emailId)}
                             helperText={formik.touched.emailId && formik.errors.emailId}
                         />
@@ -175,6 +216,7 @@ const UserForm = () => {
                             type={showPassword ? 'text' : 'password'}
                             value={formik.values.password}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.password && Boolean(formik.errors.password)}
                             helperText={formik.touched.password && formik.errors.password}
                             InputProps={{
@@ -200,6 +242,7 @@ const UserForm = () => {
                             name="contactNumber"
                             value={formik.values.contactNumber}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.contactNumber && Boolean(formik.errors.contactNumber)}
                             helperText={formik.touched.contactNumber && formik.errors.contactNumber}
                         />
@@ -207,7 +250,7 @@ const UserForm = () => {
 
                     {/* Address */}
                     <Grid item size={{ xs: 12 }}>
-                        <Typography variant="subtitle1">Address</Typography>
+                        <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Address</Typography>
                     </Grid>
 
                     <Grid item size={{ xs: 12, md: 4 }}>
@@ -217,6 +260,7 @@ const UserForm = () => {
                             name="address"
                             value={formik.values.address}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.address && Boolean(formik.errors.address)}
                             helperText={formik.touched.address && formik.errors.address}
                         />
@@ -271,6 +315,7 @@ const UserForm = () => {
                             name="distinct"
                             value={formik.values.distinct}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.distinct && Boolean(formik.errors.distinct)}
                             helperText={formik.touched.distinct && formik.errors.distinct}
                         />
@@ -284,14 +329,15 @@ const UserForm = () => {
                             type="number"
                             value={formik.values.pincode}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.pincode && Boolean(formik.errors.pincode)}
                             helperText={formik.touched.pincode && formik.errors.pincode}
                         />
                     </Grid>
 
                     {/* Documents */}
-                    <Grid item xs={12}>
-                        <Typography variant="subtitle1">Documents</Typography>
+                    <Grid item size={{ xs: 12 }}>
+                        <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>Documents</Typography>
                     </Grid>
 
                     <Grid item size={{ xs: 12, md: 4 }}>
@@ -301,6 +347,7 @@ const UserForm = () => {
                             name="idProof"
                             value={formik.values.idProof}
                             onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
                             error={formik.touched.idProof && Boolean(formik.errors.idProof)}
                             helperText={formik.touched.idProof && formik.errors.idProof}
                         />
@@ -318,6 +365,7 @@ const UserForm = () => {
                                 type="file"
                                 hidden
                                 onChange={(e) => formik.setFieldValue("idProofPhoto", e.currentTarget.files[0])}
+                                onBlur={formik.handleBlur}
                             />
                         </Button>
                         {formik.touched.idProofPhoto && formik.errors.idProofPhoto && (
@@ -337,6 +385,7 @@ const UserForm = () => {
                                 type="file"
                                 hidden
                                 onChange={(e) => formik.setFieldValue("adminProfilePhoto", e.currentTarget.files[0])}
+                                onBlur={formik.handleBlur}
                             />
                         </Button>
                         {formik.touched.adminProfilePhoto && formik.errors.adminProfilePhoto && (
@@ -345,13 +394,36 @@ const UserForm = () => {
                     </Grid>
 
                     {/* Submit */}
-                    <Grid item xs={12} display="flex" justifyContent="center">
-                        <Button variant="contained" color="primary" type="submit" size="large">
-                            Submit
+                    <Grid item size={{ xs: 12 }} display="flex" justifyContent="center" sx={{ mt: 3 }}>
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            type="submit"
+                            size="large"
+                            disabled={formik.isSubmitting}
+                        >
+                            {formik.isSubmitting ? "Submitting..." : "Submit"}
                         </Button>
                     </Grid>
                 </Grid>
             </form>
+
+            {/* Improved Snackbar */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={4000}
+                onClose={handleCloseSnackbar}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                <Alert
+                    onClose={handleCloseSnackbar}
+                    severity={snackbar.severity}
+                    variant="filled"
+                    sx={{ width: '100%' }}
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

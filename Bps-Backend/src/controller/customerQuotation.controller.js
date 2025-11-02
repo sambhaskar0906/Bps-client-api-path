@@ -68,7 +68,7 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
   let {
     firstName,
     lastName,
-    middleName, // in case user sends it
+    middleName,
     startStationName,
     endStation,
     quotationDate,
@@ -85,10 +85,12 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     toPincode,
     additionalCmt,
     sTax,
+    sgst, // Added sgst
     amount,
     productDetails,
     locality,
-    grandTotal
+    grandTotal,
+    freight // Added freight
   } = req.body;
 
   // Auto-extract name if missing
@@ -102,7 +104,7 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     lastName = parts.slice(1).join(" ") || "";
   }
 
-  // Now validate
+  // Validate required fields
   if (!firstName || !lastName) {
     return next(new ApiError(400, "Customer first and last name are required"));
   }
@@ -115,9 +117,32 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     return next(new ApiError(400, "End station is required"));
   }
 
-  // 1. Find Customer
-  const customer = await QCustomer.findOne({ firstName, lastName });
-  if (!customer) return next(new ApiError(404, "Customer not found"));
+  // Validate dates
+  if (!quotationDate || !proposedDeliveryDate) {
+    return next(new ApiError(400, "Quotation date and proposed delivery date are required"));
+  }
+
+  // 1. Find or Create Customer
+  let customer = await QCustomer.findOne({
+    $or: [
+      { contactNumber: req.body.contactNumber },
+      { emailId: req.body.email },
+      { firstName, lastName }
+    ]
+  });
+
+  if (!customer) {
+    // Create new customer if not found
+    customer = new QCustomer({
+      firstName,
+      middleName: middleName || "",
+      lastName,
+      contactNumber: req.body.contactNumber || "",
+      emailId: req.body.email || "",
+      locality: locality || ""
+    });
+    await customer.save();
+  }
 
   // 2. Find Start Station
   const station = await manageStation.findOne({ stationName: startStationName });
@@ -131,12 +156,29 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
   for (const product of productDetails) {
     if (
       !product.name ||
-      typeof product.quantity !== "number" ||
-      typeof product.price !== "number" ||
-      typeof product.weight !== "number"
+      typeof product.quantity !== 'number' ||
+      product.quantity <= 0 ||
+      typeof product.price !== 'number' ||
+      product.price < 0 ||
+      typeof product.weight !== 'number' ||
+      product.weight < 0 ||
+      !product.topay
     ) {
-      return next(new ApiError(400, "Invalid product details"));
+      return next(new ApiError(400, "Invalid product details. Please check name, quantity, price, weight, and topay fields."));
     }
+  }
+
+  // Calculate grandTotal if not provided
+  let calculatedGrandTotal = grandTotal;
+  if (!calculatedGrandTotal) {
+    const productTotal = productDetails.reduce((acc, item) => {
+      return acc + (item.price * item.quantity);
+    }, 0);
+
+    const taxAmount = (productTotal * (Number(sTax) || 0)) / 100;
+    const sgstAmount = (productTotal * (Number(sgst) || 0)) / 100;
+
+    calculatedGrandTotal = productTotal + taxAmount + sgstAmount + (Number(freight) || 0);
   }
 
   // 4. Create and Save Quotation
@@ -148,38 +190,39 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     firstName: customer.firstName,
     middleName: customer.middleName || middleName || "",
     lastName: customer.lastName,
-    mobile: customer.contactNumber,
-    email: customer.emailId,
+    mobile: customer.contactNumber || req.body.contactNumber,
+    email: customer.emailId || req.body.email,
     locality: locality || customer.locality || "",
-    quotationDate,
-    proposedDeliveryDate,
-    fromCustomerName,
+    quotationDate: new Date(quotationDate),
+    proposedDeliveryDate: new Date(proposedDeliveryDate),
+    fromCustomerName: fromCustomerName || `${firstName} ${lastName}`.trim(),
     fromAddress,
     fromCity,
     fromState,
     fromPincode,
-    toCustomerName,
-    toAddress,
-    toCity,
-    toState,
-    toPincode,
+    toCustomerName: toCustomerName || fromCustomerName || `${firstName} ${lastName}`.trim(),
+    toAddress: toAddress || fromAddress,
+    toCity: toCity || fromCity,
+    toState: toState || fromState,
+    toPincode: toPincode || fromPincode,
     additionalCmt,
-    sTax: Number(sTax),
-    amount: Number(amount),
+    sTax: Number(sTax) || 0,
+    sgst: Number(sgst) || 0,
+    amount: Number(amount) || 0,
+    freight: Number(freight) || 0,
     createdByUser: user._id,
     createdByRole: user.role,
     productDetails,
-    grandTotal,
+    grandTotal: calculatedGrandTotal,
   });
+
+  await quotation.save();
 
   const formattedQuotation = {
     ...quotation.toObject(),
     quotationDate: new Date(quotation.quotationDate).toLocaleDateString("en-IN"),
     proposedDeliveryDate: new Date(quotation.proposedDeliveryDate).toLocaleDateString("en-IN"),
   };
-
-  await quotation.save();
-  await sendBookingEmail(customer.emailId, quotation);
 
   res.status(201).json(new ApiResponse(201, formattedQuotation, "Quotation created successfully"));
 });

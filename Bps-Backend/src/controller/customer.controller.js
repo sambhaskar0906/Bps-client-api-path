@@ -24,66 +24,77 @@ const formatCustomerList = (customers) => {
 
 // CREATE Customer
 export const createCustomer = asyncHandler(async (req, res) => {
+  try {
+    const {
+      firstName,
+      middleName,
+      lastName,
+      contactNumber,
+      emailId,
+      address,
+      district,
+      state,
+      city,
+      idProof,
+      pincode,
+      gstNumber,
+      stateCode,
+      status = "active",
+      isBlacklisted = false,
+    } = req.body;
 
-  const {
-    firstName,
-    middleName,
-    lastName,
-    contactNumber,
-    emailId,
-    address,
-    district,
-    state,
-    city,
-    idProof,
-    pincode,
-    gstNumber,
-    stateCode,
-    status = "active",
-    isBlacklisted = false,
-  } = req.body;
+    // Validation
+    if ([firstName, lastName, emailId, address, state, city, idProof, stateCode].some(field => typeof field === "string" && field.trim() === "")) {
+      throw new ApiError(400, "All required fields must be provided.");
+    }
 
-  // Validate required fields
-  if ([firstName, lastName, emailId, address, state, city, idProof, stateCode].some(field => typeof field === "string" && field.trim() === "")) {
-    throw new ApiError(400, "All required fields must be provided.");
+    // Check for existing email
+    const existingCustomer = await Customer.findOne({ emailId });
+    if (existingCustomer) {
+      return res.status(400).json({ message: "Email is already registered." });
+    }
+
+    const idProofPhoto = req.files?.idProofPhoto?.[0]?.path || null;
+    const customerProfilePhoto = req.files?.customerProfilePhoto?.[0]?.path || null;
+
+    const customer = await Customer.create({
+      firstName,
+      middleName,
+      lastName,
+      contactNumber,
+      emailId,
+      address,
+      district,
+      state,
+      city,
+      idProof,
+      status,
+      isBlacklisted,
+      idProofPhoto,
+      customerProfilePhoto,
+      pincode,
+      gstNumber,
+      stateCode,
+      createdBy: req.user._id,
+    });
+
+    return res.status(201).json(new ApiResponse(201, "Customer created successfully", customer));
+
+  } catch (error) {
+    // ✅ Handle Duplicate Key Error (MongoDB)
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+      const value = error.keyValue[field];
+      return res.status(400).json({
+        message: `A customer with this ${field} (${value}) already exists.`,
+      });
+    }
+
+    console.error("Error creating customer:", error);
+    return res.status(500).json({ message: "An unexpected error occurred while creating the customer." });
   }
-
-  // Check for existing email
-  const existingCustomer = await Customer.findOne({ emailId });
-  if (existingCustomer) {
-    return res.status(400).json({ message: "Email is already registered." });
-
-  }
-
-  // Handle file uploads
-  const idProofPhoto = req.files?.idProofPhoto?.[0]?.path || null;
-  const customerProfilePhoto = req.files?.customerProfilePhoto?.[0]?.path || null;
-
-  // Create new customer
-  const customer = await Customer.create({
-    firstName,
-    middleName,
-    lastName,
-    contactNumber,
-    emailId,
-    address,
-    district,
-    state,
-    city,
-    idProof,
-    status,
-    isBlacklisted,
-    idProofPhoto,
-    customerProfilePhoto,
-    pincode,
-    gstNumber,
-    stateCode,
-    createdBy: req.user._id,
-  });
-
-
-  return res.status(201).json(new ApiResponse(201, "Customer created successfully", customer));
 });
+
 
 // GET All Customers
 export const getAllCustomers = asyncHandler(async (req, res) => {

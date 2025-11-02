@@ -39,7 +39,7 @@ function LandingPage() {
                 mb: 2,
               }}
             >
-              Courier Service & Parcel Delivery in India
+              Bharat Parcel Services Pvt. Ltd. & Parcel Delivery in India
             </Typography>
 
             <Typography

@@ -8,12 +8,12 @@ const BASE_URL = DELIVERY_API;
 
 export const assignDeliveries = createAsyncThunk(
   'delivery/assignDeliveries',
-  async ({ bookingIds, quotationIds, driverName, vehicleModel }, { rejectWithValue }) => {
+  async ({ bookingIds, quotationIds, driverId, vehicleModel }, { rejectWithValue }) => {
     try {
       const response = await axios.post(`${BASE_URL}/assign`, {
         bookingIds,
         quotationIds,
-        driverName,
+        driverId,
         vehicleModel,
       });
       return response.data.data;
@@ -60,14 +60,52 @@ export const finalDeliveryWhatsApp = createAsyncThunk(
     }
   }
 )
+export const finalizeDelivery = createAsyncThunk(
+  'delivery/finalizeDelivery', async (orderId, thunkApi) => {
+    try {
+      const res = await axios.put(`${BASE_URL}/finalize/${orderId}`);
+      return res.data;
+    } catch (err) {
+      return thunkApi.rejectWithValue(err.response?.message?.data);
+    }
+  }
+)
+
+export const driverAvailabile = createAsyncThunk(
+  'driver/available', async (deliveryType, thunkApi) => {
+    try {
+      const res = await axios.get(`${BASE_URL}/driver?type=${deliveryType}`)
+      return res.data.message;
+    }
+    catch (err) {
+      return thunkApi.rejectWithValue(err.response?.message?.data);
+    }
+  }
+)
+export const VehicleAvailabile = createAsyncThunk(
+  'vehicle/available', async (deliveryType, thunkApi) => {
+    try {
+      const res = await axios.get(`${BASE_URL}/vehicle?type=${deliveryType}`)
+      return res.data.message.availableVehicles;
+    }
+    catch (err) {
+      return thunkApi.rejectWithValue(err.response?.message?.data);
+    }
+  }
+)
 const deliverySlice = createSlice({
   name: 'delivery',
   initialState: {
     deliveries: [],
+    driver: [],
+    vehicle: [],
+
     loading: false,
     error: null,
+
   },
-  reducers: {},
+  reducers: {
+  },
   extraReducers: (builder) => {
     builder
       .addCase(assignDeliveries.pending, (state) => {
@@ -118,10 +156,30 @@ const deliverySlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
-
+      .addCase(finalizeDelivery.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+        state.success = false;
+      })
+      .addCase(finalizeDelivery.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = true;
+        state.finalizedDelivery = action.payload;
+      })
+      .addCase(finalizeDelivery.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(driverAvailabile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.driver = action.payload
+      })
+      .addCase(VehicleAvailabile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.vehicle = action.payload
+      })
       ;
   },
 });
-
 
 export default deliverySlice.reducer;

@@ -33,8 +33,11 @@ export const sidebarItems = [
     { label: 'Manage Expenses', route: '/expenses', icon: <EditNoteIcon /> },
     { label: 'Contact', route: '/contact', icon: <ContactPageIcon /> },
     { label: 'Booking Report', route: '/booking-report', icon: <BookOnlineIcon /> },
+    { label: 'B-Booking', route: '/bbooking', icon: <BookOnlineIcon /> },
+    { label: 'Q-Booking', route: '/qbooking', icon: <BookOnlineIcon /> },
     { label: 'Pending List', route: '/pending-list', icon: <AccountBalanceIcon /> },
     { label: 'Bin', route: '/bin', icon: <DeleteForeverIcon /> }
-    // { label: 'Cashbook', route: '/cashbook', icon: <MenuBookIcon /> },
+    //{ label: 'Cashbook', route: '/cashbook', icon: <MenuBookIcon /> },
     // { label: 'Manage Staff', route: '/staff', icon: <PeopleAltIcon /> },
 ];
+

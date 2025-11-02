@@ -31,7 +31,7 @@ const Bin = () => {
     const [sortConfig, setSortConfig] = useState({ key: "bookingDate", direction: "asc" });
 
     // Search states
-    const [senderSearch, setSenderSearch] = useState("");       
+    const [senderSearch, setSenderSearch] = useState("");
     const [receiverSearch, setReceiverSearch] = useState("");
     const [dateSearch, setDateSearch] = useState("");
 

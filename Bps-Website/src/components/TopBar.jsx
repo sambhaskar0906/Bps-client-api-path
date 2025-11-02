@@ -7,6 +7,7 @@ import {
   Toolbar,
   useMediaQuery,
   useTheme,
+  Stack,
 } from "@mui/material";
 import LocalPhoneIcon from "@mui/icons-material/LocalPhone";
 import logo from "../assets/Logo/logo2.png";
@@ -21,10 +22,11 @@ function TopBar({ scrolling }) {
     <AppBar
       position="static"
       sx={{
-        backgroundColor: "#f9fafc",
+        backgroundColor: "#ffffff",
         transition: "all 0.3s ease-in-out",
-        boxShadow: "0px 1px 4px rgba(0,0,0,0.1)",
-        py: 0.3,
+        boxShadow: "0px 2px 8px rgba(0,0,0,0.08)",
+        py: 0.5,
+        zIndex: 1201,
       }}
     >
       <Toolbar
@@ -34,7 +36,7 @@ function TopBar({ scrolling }) {
           justifyContent: "space-between",
           alignItems: "center",
           px: { xs: 2, sm: 4, md: 8 },
-          minHeight: "50px",
+          minHeight: "55px",
         }}
       >
         {/* ---- Logo Section ---- */}
@@ -42,7 +44,7 @@ function TopBar({ scrolling }) {
           sx={{
             display: "flex",
             alignItems: "center",
-            gap: 1,
+            gap: 1.5,
           }}
         >
           <Box
@@ -50,13 +52,15 @@ function TopBar({ scrolling }) {
             src={logo}
             alt="Company Logo"
             sx={{
-              height: { xs: 45, sm: 55 },
+              height: { xs: 45, sm: 60 },
               width: "auto",
               objectFit: "contain",
               cursor: "pointer",
-              transition: "transform 0.3s ease",
+              filter: "drop-shadow(0px 1px 2px rgba(0,0,0,0.15))",
+              transition: "transform 0.3s ease, filter 0.3s ease",
               "&:hover": {
-                transform: "scale(1.05)",
+                transform: "scale(1.07)",
+                filter: "drop-shadow(0px 2px 6px rgba(0,0,0,0.2))",
               },
             }}
           />
@@ -70,9 +74,12 @@ function TopBar({ scrolling }) {
             gap: 1,
             backgroundColor: "#e3f2fd",
             px: 2,
-            py: 0.5,
-            borderRadius: "20px",
-            boxShadow: "0 0 5px rgba(0,0,0,0.1)",
+            py: 0.6,
+            borderRadius: "25px",
+            boxShadow: "0 2px 6px rgba(21,101,192,0.2)",
+            "&:hover": {
+              backgroundColor: "#d0e4fb",
+            },
           }}
         >
           <IconButton sx={{ color: "#1565c0", p: 0.5 }}>
@@ -86,27 +93,54 @@ function TopBar({ scrolling }) {
               lineHeight: 1,
             }}
           >
-            <Typography
-              variant="caption"
-              sx={{
-                color: "#333",
-                fontWeight: 600,
-                display: { xs: "none", sm: "block" },
-              }}
-            >
-              CALL US NOW
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "#1565c0",
-                fontWeight: 700,
-                fontSize: "0.8rem",
-                ml: { xs: 0.5, sm: 0 },
-              }}
-            >
-              +91-6386963004
-            </Typography>
+            <Stack direction={'row'} spacing={5}>
+              <Box>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#333",
+                    fontWeight: 600,
+                    display: { xs: "none", sm: "block" },
+                  }}
+                >
+                  Delhi Office (Headquarter)
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#1565c0",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    ml: { xs: 0.5, sm: 0 },
+                  }}
+                >
+                  +91-7779993453
+                </Typography>
+              </Box>
+              <Box>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#333",
+                    fontWeight: 600,
+                    display: { xs: "none", sm: "block" },
+                  }}
+                >
+                  Mumbai Office
+                </Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "#1565c0",
+                    fontWeight: 700,
+                    fontSize: "0.85rem",
+                    ml: { xs: 0.5, sm: 0 },
+                  }}
+                >
+                  +91-7779993454
+                </Typography>
+              </Box>
+            </Stack>
           </Box>
         </Box>
       </Toolbar>

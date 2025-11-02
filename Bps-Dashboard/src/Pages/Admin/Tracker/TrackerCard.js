@@ -1,26 +1,25 @@
 import React, { useState } from "react";
 import {
-    Box,
     Typography,
-    TextField,
     Button,
     Paper,
     CircularProgress,
     Stack,
+    Grid
 } from "@mui/material";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { BOOKINGS_API } from '../../../utils/api'
+import CustomerSearch from "../../../Components/CustomerSearch";
 
 const TrackerCard = () => {
-    const [customerName, setCustomerName] = useState("");
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [fromDate, setFromDate] = useState(null);
     const [toDate, setToDate] = useState(null);
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
     const handleGenerateInvoice = async () => {
-        if (!customerName || !fromDate || !toDate) {
+        if (!selectedCustomer || !fromDate || !toDate) {
             setErrorMsg("Please fill in all fields");
             return;
         }
@@ -28,11 +27,11 @@ const TrackerCard = () => {
         setLoading(true);
 
         try {
-            const response = await fetch(`${BOOKINGS_API}/invoice`, {
+            const response = await fetch("http://localhost:8000/api/v2/bookings/invoice", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    customerName,
+                    customerName: selectedCustomer.name, // ✅ safer than just name
                     fromDate: fromDate.toISOString().split("T")[0],
                     toDate: toDate.toISOString().split("T")[0],
                 }),
@@ -43,7 +42,7 @@ const TrackerCard = () => {
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `${customerName}_Invoice.pdf`;
+                a.download = `${selectedCustomer.name}_Invoice.pdf`; // ✅ use selectedCustomer
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
@@ -87,32 +86,38 @@ const TrackerCard = () => {
             </Typography>
 
             {/* Form */}
-            <Stack spacing={2}>
-                <TextField
-                    fullWidth
-                    label="Customer Name"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    variant="outlined"
-                />
+            <Grid container spacing={2}>
+                <Grid size={{ xs: 12 }}>
+                    <CustomerSearch onCustomerSelect={setSelectedCustomer}
+                        slotProps={{
+                            textField: { fullWidth: true, variant: "outlined", size: "large" },
+                        }}
+                    />
+                </Grid>
 
                 <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <DatePicker
-                        label="From Date"
-                        value={fromDate}
-                        onChange={setFromDate}
-                        slotProps={{
-                            textField: { fullWidth: true, variant: "outlined" },
-                        }}
-                    />
-                    <DatePicker
-                        label="To Date"
-                        value={toDate}
-                        onChange={setToDate}
-                        slotProps={{
-                            textField: { fullWidth: true, variant: "outlined" },
-                        }}
-                    />
+                    <Grid size={{ xs: 6 }}>
+                        <DatePicker
+                            label="From Date"
+                            value={fromDate}
+                            format="dd/MM/yyyy"
+                            onChange={setFromDate}
+                            slotProps={{
+                                textField: { fullWidth: true, variant: "outlined" },
+                            }}
+                        />
+                    </Grid>
+                    <Grid size={{ xs: 6 }} >
+                        <DatePicker
+                            label="To Date"
+                            value={toDate}
+                            format="dd/MM/yyyy"
+                            onChange={setToDate}
+                            slotProps={{
+                                textField: { fullWidth: true, variant: "outlined" },
+                            }}
+                        />
+                    </Grid>
                 </LocalizationProvider>
 
                 {errorMsg && (
@@ -140,7 +145,7 @@ const TrackerCard = () => {
                 >
                     {loading ? <CircularProgress size={24} color="inherit" /> : "Generate Invoice"}
                 </Button>
-            </Stack>
+            </Grid>
         </Paper>
     );
 };

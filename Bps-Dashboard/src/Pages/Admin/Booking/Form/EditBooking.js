@@ -20,6 +20,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { viewBookingById, updateBookingById } from "../../../../features/booking/bookingSlice";
 import { fetchStations } from '../../../../features/stations/stationSlice'
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
+
 const toPay = ['pay', 'paid', 'none'];
 
 const initialValues = {
@@ -51,7 +52,7 @@ const initialValues = {
       refNo: "",
       insurance: "",
       vppAmount: "",
-      toPayPaid: "",
+      toPay: "",
       weight: "",
       amount: "",
     },
@@ -60,38 +61,66 @@ const initialValues = {
   freight: "",
   ins_vpp: "",
   billTotal: "",
+  biltyAmount: "20",
   cgst: "",
   sgst: "",
   igst: "",
   grandTotal: "",
+  roundOff: "0.00",
 };
+
 const totalFields = [
   { name: "freight", label: "FREIGHT", readOnly: false },
   { name: "ins_vpp", label: "INS/VPP", readOnly: false },
+  { name: "biltyAmount", label: "BILTY AMOUNT", readOnly: true },
   { name: "billTotal", label: "Bill Total", readOnly: true },
   { name: "cgst", label: "CGST%", readOnly: false },
   { name: "sgst", label: "SGST%", readOnly: false },
   { name: "igst", label: "IGST%", readOnly: false },
   { name: "grandTotal", label: "Grand Total", readOnly: true },
+  { name: "roundOff", label: "Round Off", readOnly: true },
 ];
+
 const calculateTotals = (values) => {
   const items = values.items || [];
-  const billTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
-  const freight = Number(values.freight || 0);
+  // Bilty Amount fixed 20 रुपये
+  const biltyAmount = 20;
+
+  // Items का total (सिर्फ FREIGHT auto-fill के लिए)
+  const itemTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  // FREIGHT में manually entered value या items का total (अगर empty है)
+  const freight = Number(values.freight || itemTotal);
+
   const ins_vpp = Number(values.ins_vpp || 0);
-  const cgst = Number(values.cgst || 0);
-  const sgst = Number(values.sgst || 0);
-  const igst = Number(values.igst || 0);
 
-  const grandTotal = billTotal + freight + ins_vpp + cgst + sgst + igst;
+  // ✅ CORRECTED: Bill Total = FREIGHT + INS/VPP + BILTY AMOUNT
+  const billTotal = freight + ins_vpp + biltyAmount;
+
+  // ✅ CORRECTED GST Calculation (Bill Total पर)
+  const cgstAmount = (billTotal * Number(values.cgst || 0)) / 100;
+  const sgstAmount = (billTotal * Number(values.sgst || 0)) / 100;
+  const igstAmount = (billTotal * Number(values.igst || 0)) / 100;
+
+  let grandTotal = billTotal + cgstAmount + sgstAmount + igstAmount;
+
+  // Round Off Calculation
+  const roundedGrandTotal = Math.round(grandTotal);
+  const roundOff = (roundedGrandTotal - grandTotal).toFixed(2);
 
   return {
     billTotal: billTotal.toFixed(2),
-    grandTotal: grandTotal.toFixed(2),
-    computedTotalRevenue: grandTotal.toFixed(2)
+    grandTotal: roundedGrandTotal.toFixed(2),
+    roundOff,
+    biltyAmount: biltyAmount.toFixed(2),
+    autoFreight: itemTotal.toFixed(2),
+    cgstAmount: cgstAmount.toFixed(2),
+    sgstAmount: sgstAmount.toFixed(2),
+    igstAmount: igstAmount.toFixed(2)
   };
 };
+
 const validationSchema = Yup.object().shape({
   startStation: Yup.string().required("Start Station is required"),
   endStation: Yup.string().required("End Station is required"),
@@ -131,7 +160,7 @@ const validationSchema = Yup.object().shape({
       vppAmount: Yup.number()
         .typeError("VPP Amount must be a number")
         .min(0, "Cannot be negative"),
-
+      toPay: Yup.string().required("Payment status is required"),
       weight: Yup.number()
         .typeError("Weight must be a number")
         .min(0, "Cannot be negative"),
@@ -150,6 +179,9 @@ const validationSchema = Yup.object().shape({
   billTotal: Yup.number()
     .typeError("Bill Total must be a number")
     .min(0, "Cannot be negative"),
+  biltyAmount: Yup.number()
+    .typeError("Bilty Amount must be a number")
+    .min(0, "Cannot be negative"),
   cgst: Yup.number()
     .typeError("CGST must be a number")
     .min(0, "Cannot be negative"),
@@ -162,6 +194,8 @@ const validationSchema = Yup.object().shape({
   grandTotal: Yup.number()
     .typeError("Grand Total must be a number")
     .min(0, "Cannot be negative"),
+  roundOff: Yup.number()
+    .typeError("Round Off must be a number"),
 });
 
 const EditBooking = () => {
@@ -173,19 +207,18 @@ const EditBooking = () => {
   const { list: stations } = useSelector((state) => state.stations);
   const { loading, error, viewedBooking } = useSelector(state => state.bookings);
   const { states, cities } = useSelector((state) => state.location);
+
   useEffect(() => {
     dispatch(fetchStations());
     dispatch(fetchStates());
-  }, [dispatch])
+  }, [dispatch]);
+
   useEffect(() => {
     if (bookingId) {
       dispatch(viewBookingById(bookingId));
     }
   }, [bookingId, dispatch]);
 
-  useEffect(() => {
-
-  }, [viewedBooking]);
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Formik
@@ -196,9 +229,12 @@ const EditBooking = () => {
           deliveryDate: viewedBooking?.deliveryDate ? new Date(viewedBooking.deliveryDate) : new Date(),
           startStation: viewedBooking?.startStation?.stationName || "",
           endStation: viewedBooking?.endStation?.stationName || "",
+          biltyAmount: "20",
+          roundOff: viewedBooking?.roundOff || "0.00",
         }}
         validationSchema={validationSchema}
-        onSubmit={(values) => {
+        onSubmit={(values, { setSubmitting }) => {
+          setSubmitting(true);
           dispatch(updateBookingById({ bookingId, data: values }))
             .unwrap()
             .then(() => {
@@ -207,27 +243,40 @@ const EditBooking = () => {
             })
             .catch((error) => {
               console.error("Failed to update", error);
+              alert("Failed to update booking");
+            })
+            .finally(() => {
+              setSubmitting(false);
             });
         }}
-
         enableReinitialize
       >
-        {({ values, handleChange, setFieldValue }) => (
+        {({ values, handleChange, setFieldValue, isSubmitting, errors, touched }) => (
           <Form>
-            <EffectSyncCities values={values} dispatch={dispatch} setSenderCities={setSenderCities}
-              setReceiverCities={setReceiverCities} />
-            <EffectSyncTotals values={values} setFieldValue={setFieldValue} />
+            <EffectSyncCities
+              values={values}
+              dispatch={dispatch}
+              setSenderCities={setSenderCities}
+              setReceiverCities={setReceiverCities}
+            />
+            <EffectSyncTotals
+              values={values}
+              setFieldValue={setFieldValue}
+            />
+
             <Button
               variant="outlined"
               startIcon={<ArrowBack />}
               onClick={() => navigate(-1)}
-              sx={{ mr: 2 }}
+              sx={{ mr: 2, mb: 2 }}
             >
               Back
             </Button>
+
             <Box sx={{ p: 3, maxWidth: 1200, mx: "auto" }}>
               <Grid container spacing={2}>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                {/* Station Details */}
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -235,16 +284,17 @@ const EditBooking = () => {
                     name="startStation"
                     value={values.startStation}
                     onChange={handleChange}
+                    error={touched.startStation && Boolean(errors.startStation)}
+                    helperText={touched.startStation && errors.startStation}
                   >
                     {stations.map((station) => (
                       <MenuItem key={station.stationId || station.sNo} value={station.stationName}>
                         {station.stationName}
                       </MenuItem>
                     ))}
-
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -252,6 +302,8 @@ const EditBooking = () => {
                     name="endStation"
                     value={values.endStation}
                     onChange={handleChange}
+                    error={touched.endStation && Boolean(errors.endStation)}
+                    helperText={touched.endStation && errors.endStation}
                   >
                     {stations.map((station) => (
                       <MenuItem key={station.stationId || station.sNo} value={station.stationName}>
@@ -261,28 +313,40 @@ const EditBooking = () => {
                   </TextField>
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
+                {/* Date Details */}
+                <Grid size={{ xs: 12, md: 6 }}>
                   <DatePicker
                     label="Booking Date"
                     value={values.bookingDate}
                     onChange={(val) => setFieldValue("bookingDate", val)}
                     renderInput={(params) => (
-                      <TextField fullWidth {...params} name="bookingDate" />
+                      <TextField
+                        fullWidth
+                        {...params}
+                        error={touched.bookingDate && Boolean(errors.bookingDate)}
+                        helperText={touched.bookingDate && errors.bookingDate}
+                      />
                     )}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <DatePicker
                     label="Proposed Delivery Date"
                     value={values.deliveryDate}
                     onChange={(val) => setFieldValue("deliveryDate", val)}
                     renderInput={(params) => (
-                      <TextField fullWidth {...params} name="deliveryDate" />
+                      <TextField
+                        fullWidth
+                        {...params}
+                        error={touched.deliveryDate && Boolean(errors.deliveryDate)}
+                        helperText={touched.deliveryDate && errors.deliveryDate}
+                      />
                     )}
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 9 }}>
+                {/* Customer Search */}
+                <Grid size={{ xs: 12, md: 9 }}>
                   <Typography fontWeight="bold">
                     Customer Name/Number
                   </Typography>
@@ -301,30 +365,30 @@ const EditBooking = () => {
                     }}
                   />
                 </Grid>
-                <Grid
-                  size={{ xs: 12, sm: 3 }}
-                  sx={{ display: "flex", alignItems: "flex-end" }}
-                >
+                <Grid size={{ xs: 12, md: 3 }} sx={{ display: "flex", alignItems: "flex-end" }}>
                   <Button
                     fullWidth
                     variant="contained"
                     startIcon={<AddIcon />}
-                    type="submit"
+                    type="button"
                   >
                     Register
                   </Button>
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 4 }}>
+                {/* Personal Details */}
+                <Grid size={{ xs: 12, md: 4 }}>
                   <TextField
                     fullWidth
                     label="First Name"
                     name="firstName"
                     value={values.firstName}
                     onChange={handleChange}
+                    error={touched.firstName && Boolean(errors.firstName)}
+                    helperText={touched.firstName && errors.firstName}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <TextField
                     fullWidth
                     label="Middle Name"
@@ -333,26 +397,30 @@ const EditBooking = () => {
                     onChange={handleChange}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
+                <Grid size={{ xs: 12, md: 4 }}>
                   <TextField
                     fullWidth
                     label="Last Name"
                     name="lastName"
                     value={values.lastName}
                     onChange={handleChange}
+                    error={touched.lastName && Boolean(errors.lastName)}
+                    helperText={touched.lastName && errors.lastName}
                   />
                 </Grid>
 
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Contact Number"
                     name="mobile"
                     value={values.mobile}
                     onChange={handleChange}
+                    error={touched.mobile && Boolean(errors.mobile)}
+                    helperText={touched.mobile && errors.mobile}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Email"
@@ -360,40 +428,49 @@ const EditBooking = () => {
                     value={values.email}
                     onChange={handleChange}
                     type="email"
+                    error={touched.email && Boolean(errors.email)}
+                    helperText={touched.email && errors.email}
                   />
                 </Grid>
 
+                {/* Sender Address */}
                 <Grid size={{ xs: 12 }}>
-                  <Typography variant="h6">From (Address)</Typography>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>From (Address)</Typography>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Name"
                     name="senderName"
                     value={values.senderName}
                     onChange={handleChange}
+                    error={touched.senderName && Boolean(errors.senderName)}
+                    helperText={touched.senderName && errors.senderName}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="GST Number"
                     name="senderGgt"
                     value={values.senderGgt}
                     onChange={handleChange}
+                    error={touched.senderGgt && Boolean(errors.senderGgt)}
+                    helperText={touched.senderGgt && errors.senderGgt}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Locality / Street"
                     name="senderLocality"
                     value={values.senderLocality}
                     onChange={handleChange}
+                    error={touched.senderLocality && Boolean(errors.senderLocality)}
+                    helperText={touched.senderLocality && errors.senderLocality}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -401,6 +478,8 @@ const EditBooking = () => {
                     name="fromState"
                     value={values.fromState}
                     onChange={handleChange}
+                    error={touched.fromState && Boolean(errors.fromState)}
+                    helperText={touched.fromState && errors.fromState}
                   >
                     {states.map((s) => (
                       <MenuItem key={s} value={s}>
@@ -409,7 +488,7 @@ const EditBooking = () => {
                     ))}
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -417,6 +496,8 @@ const EditBooking = () => {
                     name="fromCity"
                     value={values.fromCity}
                     onChange={handleChange}
+                    error={touched.fromCity && Boolean(errors.fromCity)}
+                    helperText={touched.fromCity && errors.fromCity}
                   >
                     {senderCities.map((c) => (
                       <MenuItem key={c} value={c}>
@@ -425,47 +506,56 @@ const EditBooking = () => {
                     ))}
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Pin Code"
                     name="senderPincode"
                     value={values.senderPincode}
                     onChange={handleChange}
+                    error={touched.senderPincode && Boolean(errors.senderPincode)}
+                    helperText={touched.senderPincode && errors.senderPincode}
                   />
                 </Grid>
 
+                {/* Receiver Address */}
                 <Grid size={{ xs: 12 }}>
-                  <Typography variant="h6">To (Address)</Typography>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>To (Address)</Typography>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Name"
                     name="receiverName"
                     value={values.receiverName}
                     onChange={handleChange}
+                    error={touched.receiverName && Boolean(errors.receiverName)}
+                    helperText={touched.receiverName && errors.receiverName}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="GST Number"
                     name="receiverGgt"
                     value={values.receiverGgt}
                     onChange={handleChange}
+                    error={touched.receiverGgt && Boolean(errors.receiverGgt)}
+                    helperText={touched.receiverGgt && errors.receiverGgt}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Locality / Street"
                     name="receiverLocality"
                     value={values.receiverLocality}
                     onChange={handleChange}
+                    error={touched.receiverLocality && Boolean(errors.receiverLocality)}
+                    helperText={touched.receiverLocality && errors.receiverLocality}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -473,6 +563,8 @@ const EditBooking = () => {
                     name="toState"
                     value={values.toState}
                     onChange={handleChange}
+                    error={touched.toState && Boolean(errors.toState)}
+                    helperText={touched.toState && errors.toState}
                   >
                     {states.map((s) => (
                       <MenuItem key={s} value={s}>
@@ -481,7 +573,7 @@ const EditBooking = () => {
                     ))}
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     select
                     fullWidth
@@ -489,6 +581,8 @@ const EditBooking = () => {
                     name="toCity"
                     value={values.toCity}
                     onChange={handleChange}
+                    error={touched.toCity && Boolean(errors.toCity)}
+                    helperText={touched.toCity && errors.toCity}
                   >
                     {receiverCities.map((c) => (
                       <MenuItem key={c} value={c}>
@@ -497,34 +591,31 @@ const EditBooking = () => {
                     ))}
                   </TextField>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <TextField
                     fullWidth
                     label="Pin Code"
                     name="toPincode"
                     value={values.toPincode}
                     onChange={handleChange}
+                    error={touched.toPincode && Boolean(errors.toPincode)}
+                    helperText={touched.toPincode && errors.toPincode}
                   />
                 </Grid>
 
+                {/* Product Details */}
                 <Grid size={{ xs: 12 }}>
-                  <Typography variant="h6">Product Details</Typography>
+                  <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Product Details</Typography>
                 </Grid>
                 <FieldArray name="items">
                   {({ push, remove }) => (
                     <>
                       {values.items.map((item, index) => (
-                        <Grid
-                          container
-                          spacing={2}
-                          key={index}
-                          alignItems="center"
-                          sx={{ mb: 2 }}
-                        >
+                        <Grid container spacing={2} key={index} alignItems="center" sx={{ mb: 2 }}>
                           <Grid size={{ xs: 0.5 }}>
                             <Typography>{index + 1}.</Typography>
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -532,9 +623,11 @@ const EditBooking = () => {
                               name={`items[${index}].receiptNo`}
                               value={item.receiptNo}
                               onChange={handleChange}
+                              error={touched.items?.[index]?.receiptNo && Boolean(errors.items?.[index]?.receiptNo)}
+                              helperText={touched.items?.[index]?.receiptNo && errors.items?.[index]?.receiptNo}
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -542,9 +635,11 @@ const EditBooking = () => {
                               name={`items[${index}].refNo`}
                               value={item.refNo}
                               onChange={handleChange}
+                              error={touched.items?.[index]?.refNo && Boolean(errors.items?.[index]?.refNo)}
+                              helperText={touched.items?.[index]?.refNo && errors.items?.[index]?.refNo}
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -552,9 +647,10 @@ const EditBooking = () => {
                               name={`items[${index}].insurance`}
                               value={item.insurance}
                               onChange={handleChange}
+                              type="number"
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -562,9 +658,10 @@ const EditBooking = () => {
                               name={`items[${index}].vppAmount`}
                               value={item.vppAmount}
                               onChange={handleChange}
+                              type="number"
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -572,9 +669,10 @@ const EditBooking = () => {
                               name={`items[${index}].weight`}
                               value={item.weight}
                               onChange={handleChange}
+                              type="number"
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
+                          <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
@@ -582,9 +680,10 @@ const EditBooking = () => {
                               name={`items[${index}].amount`}
                               value={item.amount}
                               onChange={handleChange}
+                              type="number"
                             />
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1.5 }}>
+                          <Grid size={{ xs: 12, md: 1.5 }}>
                             <TextField
                               select
                               fullWidth
@@ -601,12 +700,13 @@ const EditBooking = () => {
                               ))}
                             </TextField>
                           </Grid>
-                          <Grid size={{ xs: 3, sm: 3, md: 1 }}>
+                          <Grid size={{ xs: 12, md: 1 }}>
                             <Button
                               color="error"
                               onClick={() => remove(index)}
                               variant="outlined"
                               fullWidth
+                              disabled={values.items.length === 1}
                             >
                               Remove
                             </Button>
@@ -624,11 +724,12 @@ const EditBooking = () => {
                               refNo: "",
                               insurance: "",
                               vppAmount: "",
-                              toPay: "",
+                              toPay: "pay",
                               weight: "",
                               amount: "",
                             })
                           }
+                          sx={{ mt: 2 }}
                         >
                           + Add Item
                         </Button>
@@ -637,7 +738,8 @@ const EditBooking = () => {
                   )}
                 </FieldArray>
 
-                <Grid size={{ xs: 12, md: 9 }}>
+                {/* Comments and Totals */}
+                <Grid size={{ xs: 12, md: 8 }}>
                   <TextField
                     name="addComment"
                     label="Additional Comments"
@@ -647,12 +749,13 @@ const EditBooking = () => {
                     value={values.addComment}
                     onChange={handleChange}
                     variant="outlined"
+                    sx={{ mt: 2 }}
                   />
                 </Grid>
-                <Grid size={{ xs: 12, md: 3 }}>
-                  <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <Grid container spacing={2} sx={{ mt: 2 }}>
                     {totalFields.map(({ name, label, readOnly }) => (
-                      <Grid item xs={6} key={name}>
+                      <Grid size={{ xs: 12, md: 6 }} key={name}>
                         <TextField
                           name={name}
                           label={label}
@@ -672,14 +775,17 @@ const EditBooking = () => {
                   </Grid>
                 </Grid>
 
+                {/* Submit Button */}
                 <Grid size={{ xs: 12 }}>
                   <Button
                     type="submit"
                     fullWidth
                     variant="contained"
                     color="primary"
+                    disabled={isSubmitting}
+                    sx={{ mt: 3, py: 1.5 }}
                   >
-                    Update Booking
+                    {isSubmitting ? "Updating..." : "Update Booking"}
                   </Button>
                 </Grid>
               </Grid>
@@ -690,6 +796,7 @@ const EditBooking = () => {
     </LocalizationProvider>
   );
 };
+
 const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities }) => {
   useEffect(() => {
     if (values.fromState) {
@@ -715,13 +822,21 @@ const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities
 
   return null;
 };
+
 const EffectSyncTotals = ({ values, setFieldValue }) => {
   useEffect(() => {
     const totals = calculateTotals(values);
+
+    // FREIGHT को auto-fill करें (अगर empty है)
+    if (!values.freight || values.freight === "" || values.freight === "0") {
+      setFieldValue("freight", totals.autoFreight);
+    }
+
+    // अन्य totals set करें
     setFieldValue("billTotal", totals.billTotal);
     setFieldValue("grandTotal", totals.grandTotal);
-    // Optional:
-    // setFieldValue("computedTotalRevenue", totals.computedTotalRevenue);
+    setFieldValue("roundOff", totals.roundOff);
+    setFieldValue("biltyAmount", totals.biltyAmount);
   }, [
     values.items,
     values.freight,
@@ -734,4 +849,5 @@ const EffectSyncTotals = ({ values, setFieldValue }) => {
 
   return null;
 };
+
 export default EditBooking;

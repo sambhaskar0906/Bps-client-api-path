@@ -25,6 +25,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Checkbox,
 } from "@mui/material";
 import {
   CancelScheduleSend as CancelScheduleSendIcon,
@@ -43,6 +44,7 @@ import { bookingRequestCount, activeBookingCount, cancelledBookingCount, fetchBo
 import SendIcon from '@mui/icons-material/Send';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import SlipModal from "../../../Components/SlipModal";
+import { finalizeDelivery } from '../../../features/delivery/deliverySlice';
 const createData = (id, orderby, date, namep, pickup, named, drop, contact) => ({
   id,
   orderby,
@@ -77,6 +79,7 @@ function stableSort(array, comparator) {
 }
 
 const headCells = [
+  { id: "active", label: "Active Delivery", sortable: false },
   { id: "sno", label: "S.No", sortable: false },
   { id: "orderby", label: "Order By", sortable: true },
   { id: "date", label: "Date", sortable: true },
@@ -193,8 +196,6 @@ const BookingCard = () => {
     navigate(`/booking/${bookingId}`);
   };
 
-
-
   const handleEdit = (bookingId) => {
     navigate(`/editbooking/${bookingId}`);
   };
@@ -209,7 +210,7 @@ const BookingCard = () => {
   }
 
   const handleDeleteConfirm = () => {
-    dispatch(deleteBooking(bookingToDelete))
+    dispatch(deleteBooking(bookingToDelete));
     setDeleteDialogOpen(false);
     setBookingToDelete(null);
   };
@@ -225,6 +226,24 @@ const BookingCard = () => {
   const handleCloseSlip = () => {
     dispatch(clearViewedBooking());
   };
+  const handleActiveChange = (orderId, isActive) => {
+    if (isActive) {
+      if (window.confirm("Are you sure you want to finalize this delivery?")) {
+        dispatch(finalizeDelivery(orderId))
+          .unwrap()
+          .then(() => {
+            alert("Delivery finalized successfully!");
+            dispatch(fetchBookingsByType('active'));
+          })
+          .catch((error) => {
+            alert(`Failed to finalize delivery: ${error}`);
+          });
+      }
+    } else {
+      alert("You cannot unfinalize a delivery once completed.");
+    }
+  };
+
   const filteredRows = (
     isRevenueCardActive
       ? (Array.isArray(revenueData)
@@ -415,26 +434,30 @@ const BookingCard = () => {
           <Table>
             <TableHead sx={{ backgroundColor: "#1565c0" }}>
               <TableRow>
-                {displayHeadCells.map((headCell) => (
-                  <TableCell
-                    key={headCell.id}
-                    sx={{ fontWeight: "bold", color: "white" }}
-                    sortDirection={orderBy === headCell.id ? order : false}
-                  >
-                    {headCell.sortable ? (
-                      <TableSortLabel
-                        active={orderBy === headCell.id}
-                        direction={orderBy === headCell.id ? order : "asc"}
-                        onClick={() => handleRequestSort(headCell.id)}
-                        sx={{ color: "white !important" }}
-                      >
-                        {headCell.label}
-                      </TableSortLabel>
-                    ) : (
-                      headCell.label
-                    )}
-                  </TableCell>
-                ))}
+                {displayHeadCells.filter((headCell) => {
+                  if (headCell.id === "active" && selectedList !== "active") return false;
+                  return true;
+                })
+                  .map((headCell) => (
+                    <TableCell
+                      key={headCell.id}
+                      sx={{ fontWeight: "bold", color: "white", whiteSpace: 'nowrap' }}
+                      sortDirection={orderBy === headCell.id ? order : false}
+                    >
+                      {headCell.sortable ? (
+                        <TableSortLabel
+                          active={orderBy === headCell.id}
+                          direction={orderBy === headCell.id ? order : "asc"}
+                          onClick={() => handleRequestSort(headCell.id)}
+                          sx={{ color: "white !important" }}
+                        >
+                          {headCell.label}
+                        </TableSortLabel>
+                      ) : (
+                        headCell.label
+                      )}
+                    </TableCell>
+                  ))}
               </TableRow>
             </TableHead>
 
@@ -466,6 +489,16 @@ const BookingCard = () => {
                       </>
                     ) : (
                       <>
+                        {selectedList === "active" && (
+                          <TableCell>
+                            <Checkbox
+                              checked={row.isActive || false}
+                              disabled={row.isFinalized}
+                              onChange={(e) => handleActiveChange(row.orderId, e.target.checked)}
+                              color="primary"
+                            />
+                          </TableCell>
+                        )}
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.orderBy}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.date}</TableCell>

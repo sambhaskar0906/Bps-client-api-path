@@ -152,9 +152,23 @@ export const getQuotationBookingSummaryByDate = createAsyncThunk(
 
   }
 )
+export const fetchIncomingQuotations = createAsyncThunk(
+  'quotation/fetchIncomingQuotations',
+  async ({ fromDate, toDate }, thunkApi) => {
+    try {
+      const res = await axios.post(`${BASE_URL}/qincoming`, { fromDate, toDate });
+      return res.data.data; // backend sends { success, count, data }
+    } catch (err) {
+      return thunkApi.rejectWithValue(
+        err.response?.data?.message || 'Failed to fetch incoming quotations'
+      );
+    }
+  }
+);
 const initialState = {
   list: [],
   list2: [],
+  quotationsList: [],
   requestCount: 0,
   activeDeliveriesCount: 0,
   cancelledDeliveriesCount: 0,
@@ -222,6 +236,7 @@ const quotationSlice = createSlice({
       state.viewedBooking = null;
     }
   },
+
   extraReducers: (builder) => {
     builder
       //for booking.
@@ -342,6 +357,18 @@ const quotationSlice = createSlice({
       .addCase(getQuotationBookingSummaryByDate.fulfilled, (state, action) => {
         state.loading = false;
         state.list2 = action.payload;
+      })
+      .addCase(fetchIncomingQuotations.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchIncomingQuotations.fulfilled, (state, action) => {
+        state.loading = false;
+        state.quotationsList = action.payload;
+      })
+      .addCase(fetchIncomingQuotations.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       })
 
   }

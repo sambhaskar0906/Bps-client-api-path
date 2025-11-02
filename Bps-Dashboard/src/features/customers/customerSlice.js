@@ -16,14 +16,15 @@ export const createCustomer = createAsyncThunk(
       }
 
       const response = await axios.post(`${BASE_URL}/create`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       return response.data.message;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.message || err.message);
+      // ✅ Extract backend message clearly
+      const backendMsg = err.response?.data?.message;
+      const fallbackMsg = err.message || "Something went wrong while creating customer.";
+      return rejectWithValue({ message: backendMsg || fallbackMsg });
     }
   }
 );

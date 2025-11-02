@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
     Box,
     Card,
@@ -13,11 +13,9 @@ import {
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { loginUser, fetchUserProfile } from '../features/loginSlice';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import loginImage from '../assets/BoxMan.svg';
-import { useLocation } from 'react-router-dom';
 import { FRONTEND_BASE_URL } from "../utils/api";
-
 
 const Login = () => {
     const dispatch = useDispatch();
@@ -38,12 +36,14 @@ const Login = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        try {
 
+        try {
+            // Step 1: Login API
             const loginResponse = await dispatch(loginUser(formData)).unwrap();
             const token = loginResponse.message.token;
             localStorage.setItem("authToken", token);
 
+            // Step 2: Fetch user profile
             const profileResponse = await dispatch(fetchUserProfile(token)).unwrap();
             const role = profileResponse.message?.role;
 
@@ -55,16 +55,19 @@ const Login = () => {
                 console.warn("⚠️ Role is not a valid string.");
             }
 
-            setTimeout(() => {
-                window.location.href = `${FRONTEND_BASE_URL}/?token=${token}&role=${role}`;
-            }, 100);
+            // Step 3: Redirect user (admin / supervisor)
+            if (role === 'admin') {
+                window.location.href = `${FRONTEND_BASE_URL}/admin?token=${token}&role=${role}`;
+            } else if (role === 'supervisor') {
+                window.location.href = `${FRONTEND_BASE_URL}/supervisor?token=${token}&role=${role}`;
+            } else {
+                window.location.href = `${FRONTEND_BASE_URL}/?token=${token}`;
+            }
 
         } catch (err) {
             console.error('❌ Login or Profile fetch failed', err);
         }
     };
-
-
 
     return (
         <Box
@@ -87,7 +90,7 @@ const Login = () => {
                     overflow: 'hidden',
                 }}
             >
-                {/* Left - Form */}
+                {/* Left - Login Form */}
                 <Box
                     sx={{
                         width: { xs: '100%', md: '50%' },
@@ -97,7 +100,7 @@ const Login = () => {
                         justifyContent: 'center',
                     }}
                 >
-                    <Typography variant="h2" fontWeight="bold" gutterBottom align="center">
+                    <Typography variant="h3" fontWeight="bold" gutterBottom align="center">
                         Welcome BPS
                     </Typography>
                     <Typography variant="subtitle1" gutterBottom align="center">

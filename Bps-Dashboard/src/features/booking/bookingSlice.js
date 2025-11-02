@@ -258,15 +258,14 @@ export const receiveCustomerPayment = createAsyncThunk(
   "bookings/receiveCustomerPayment",
   async ({ customerId, amount }, { rejectWithValue }) => {
     try {
-      const res = await axios.post(`${BASE_URL}/payment/${customerId}`, {
-        amount
-      });
+      const res = await axios.post(`${BASE_URL}/payment/${customerId}`, { amount });
       return {
         customerId,
-        paymentResponse: res.data
+        paymentData: res.data.data   // ✅ only the "data" object
       };
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message);
+      console.error("Payment failed:", err);
+      return rejectWithValue(err.response?.data || { message: err.message });
     }
   }
 );
@@ -284,6 +283,27 @@ export const fetchInvoicesByFilter = createAsyncThunk(
       return rejectWithValue(
         err.response?.data?.message || err.message || "Something went wrong"
       );
+    }
+  }
+);
+// bookingSlice.js (top part with other thunks)
+export const fetchIncomingBookings = createAsyncThunk(
+  'bookings/fetchIncomingBookings',
+  async ({ fromDate, toDate }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await axios.post(
+        `${BASE_URL}/incoming`,
+        { fromDate, toDate },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      return res.data.data; // backend sends { success, count, data }
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to fetch incoming bookings');
     }
   }
 );
@@ -314,12 +334,14 @@ export const listDeletedBookings = createAsyncThunk(
   }
 );
 
+
 const initialState = {
   list: [],
   list2: [],
   list3: [],
   list4: [],
   list5: [],
+  incomingList: [],
   requestCount: 0,
   activeDeliveriesCount: 0,
   cancelledDeliveriesCount: 0,
@@ -419,7 +441,10 @@ const bookingSlice = createSlice({
       //for deleting
       .addCase(deleteBooking.fulfilled, (state, action) => {
         state.loading = false;
-        state.list = state.list.filter(booking => booking.bookingId !== action.payload);
+        // Remove from all lists
+        state.list = state.list.filter(booking => booking.bookingId !== action.payload && booking._id !== action.payload);
+        // Show success message
+        state.message = "Booking moved to recycle bin successfully";
       })
       //fetching list 
       .addCase(fetchBookingsByType.pending, (state) => {
@@ -606,10 +631,10 @@ const bookingSlice = createSlice({
       })
       .addCase(receiveCustomerPayment.fulfilled, (state, action) => {
         state.loading = false;
-        const { customerId, paymentResponse } = action.payload;
+        const { customerId, paymentData } = action.payload; // ✅ Correct destructuring
 
         // Update local state instantly
-        const updatedStats = paymentResponse.data.updatedStats;
+        const updatedStats = paymentData?.updatedStats; // ✅ Use paymentData
         const customerIndex = state.customers.findIndex(
           (c) => c.customerId === customerId
         );
@@ -644,6 +669,18 @@ const bookingSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      .addCase(fetchIncomingBookings.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchIncomingBookings.fulfilled, (state, action) => {
+        state.loading = false;
+        state.incomingList = action.payload;
+      })
+      .addCase(fetchIncomingBookings.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
       .addCase(restoreBooking.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -671,8 +708,8 @@ const bookingSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       });
-
   }
-})
+});
+
 export const { setFormField, resetForm, addBooking, setBooking, clearViewedBooking } = bookingSlice.actions;
 export default bookingSlice.reducer;

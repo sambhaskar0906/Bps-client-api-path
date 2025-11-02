@@ -43,7 +43,7 @@ const dummySetter = () => { };
 
 const generateInitialValues = () => {
   const receiptNo = generateUniqueId("RCPT-", dummySet, dummySetter);
-  const refNo = generateUniqueId("REF-", dummySet, dummySetter);
+  const refNo = "";
 
   return {
     startStation: "",
@@ -84,14 +84,16 @@ const generateInitialValues = () => {
     freight: "",
     ins_vpp: "",
     billTotal: "",
+    biltyAmount: "20",
     cgst: "",
     sgst: "",
     igst: "",
     grandTotal: "",
+    roundOff: "",
   };
 };
 const totalFields = [
-  { name: "freight", label: "FREIGHT", readOnly: false },
+  { name: "freight", label: "FREIGHT", readOnly: true },
   { name: "ins_vpp", label: "INS/VPP", readOnly: false },
   { name: "billTotal", label: "Bill Total", readOnly: true },
   { name: "cgst", label: "CGST%", readOnly: false },
@@ -99,15 +101,18 @@ const totalFields = [
   { name: "igst", label: "IGST%", readOnly: false },
   { name: "grandTotal", label: "Grand Total", readOnly: true },
   { name: "roundOff", label: "Round Off", readOnly: true },
+  { name: "biltyAmount", label: "BILTY AMOUNT", readOnly: true },
 ];
 const calculateTotals = (values) => {
   const items = values.items || [];
 
+  const biltyAmount = 20;
+
   const itemTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const freight = Number(values.freight || 0);
+  const freight = Number(values.freight || itemTotal);
   const ins_vpp = Number(values.ins_vpp || 0);
 
-  const billTotal = itemTotal + freight + ins_vpp;
+  const billTotal = freight + ins_vpp + biltyAmount;
 
   const cgst = (Number(values.cgst || 0) / 100) * billTotal;
   const sgst = (Number(values.sgst || 0) / 100) * billTotal;
@@ -128,10 +133,11 @@ const calculateTotals = (values) => {
     cgst: cgst.toFixed(2),
     sgst: sgst.toFixed(2),
     igst: igst.toFixed(2),
-    roundOff
+    roundOff,
+    biltyAmount: biltyAmount.toFixed(2),
+    autoFreight: itemTotal.toFixed(2)
   };
 };
-
 
 
 const BookingForm = () => {
@@ -601,7 +607,7 @@ const BookingForm = () => {
                           onClick={() =>
                             push({
                               receiptNo: generateUniqueId("RCPT-", generatedReceiptNos, setGeneratedReceiptNos),
-                              refNo: generateUniqueId("REF-", generatedRefNos, setGeneratedRefNos),
+                              refNo: "",
                               insurance: "",
                               vppAmount: "",
                               toPayPaid: "",
@@ -760,9 +766,14 @@ const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities
 const EffectSyncTotals = ({ values, setFieldValue }) => {
   useEffect(() => {
     const totals = calculateTotals(values);
+    const itemTotal = values.items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    if (!values.freight || values.freight === "0" || Number(values.freight) !== itemTotal) {
+      setFieldValue("freight", totals.autoFreight);
+    }
     setFieldValue("billTotal", totals.billTotal);
     setFieldValue("grandTotal", totals.grandTotal);
     setFieldValue("roundOff", totals.roundOff);
+    setFieldValue("biltyAmount", totals.biltyAmount);
   }, [
     values.items,
     values.freight,
