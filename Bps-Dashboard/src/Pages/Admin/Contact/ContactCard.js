@@ -45,7 +45,7 @@ const ContactCard = () => {
     const contacts = useSelector(selectContactList);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [editIndex, setEditIndex] = useState(null); // index in the contacts array for editing
+    const [editIndex, setEditIndex] = useState(null);
     const [page, setPage] = useState(1);
     const [isViewMode, setIsViewMode] = useState(false);
     const rowsPerPage = 5;
@@ -233,7 +233,6 @@ const ContactCard = () => {
                             <TableCell sx={{ color: '#fff' }}>S.No.</TableCell>
                             <TableCell sx={{ color: '#fff' }}>Name</TableCell>
                             <TableCell sx={{ color: '#fff' }}>Number</TableCell>
-                            <TableCell sx={{ color: '#fff' }}>Email</TableCell>
                             <TableCell sx={{ color: '#fff' }}>Address</TableCell>
                             <TableCell sx={{ color: '#fff' }}>Action</TableCell>
                         </TableRow>
@@ -246,7 +245,6 @@ const ContactCard = () => {
                                     <TableCell>{(page - 1) * rowsPerPage + index + 1}</TableCell>
                                     <TableCell>{contact.name}</TableCell>
                                     <TableCell>{contact.contactNumber}</TableCell>
-                                    <TableCell>{contact.email}</TableCell>
                                     <TableCell>{contact.address}</TableCell>
                                     <TableCell>
                                         <IconButton onClick={() => handleView(contact)} color="primary">

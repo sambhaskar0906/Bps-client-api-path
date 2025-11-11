@@ -247,7 +247,7 @@ export const createBooking = async (req, res) => {
     await booking.save();
 
     // Send booking confirmation email to customer
-    await sendBookingEmail(customer.emailId, booking);
+    // await sendBookingEmail(customer.emailId, booking);
     // Send success response
     res.status(201).json({ message: "Booking created successfully", booking });
   } catch (err) {

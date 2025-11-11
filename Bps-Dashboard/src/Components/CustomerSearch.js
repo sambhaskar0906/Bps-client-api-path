@@ -15,7 +15,7 @@ import * as Yup from 'yup';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchActiveCustomer } from '../features/customers/customerSlice';
 
-const CustomerSearch = ({ onCustomerSelect }) => {
+const CustomerSearch = ({ onCustomerSelect, type = "sender" }) => {
     const dispatch = useDispatch();
     const { list: customerList } = useSelector((state) => state.customers);
     const [filteredCustomers, setFilteredCustomers] = useState([]);
@@ -37,20 +37,24 @@ const CustomerSearch = ({ onCustomerSelect }) => {
 
     const { values, touched, errors, handleChange, handleBlur, setFieldValue } = formik;
 
-    // 🔍 Live filter logic
+    // 🔍 Live filter logic - FIXED VERSION
     const handleInputChange = (e) => {
         handleChange(e);
         const search = e.target.value.trim().toLowerCase().replace(/\s+/g, ' ');
+
         if (search.length === 0) {
             setFilteredCustomers([]);
             setNotFound(false);
+            if (onCustomerSelect) onCustomerSelect(null); // Clear selection
             return;
         }
 
         const matches = customerList.filter((customer) => {
-            const contact = customer.contactNumber?.toString().toLowerCase();
-            const email = customer.emailId?.toLowerCase();
-            const name = customer.name?.toLowerCase().replace(/\s+/g, ' ');
+            // Safely handle potentially undefined properties
+            const contact = customer.contactNumber?.toString().toLowerCase() || '';
+            const email = customer.emailId?.toLowerCase() || '';
+            const name = customer.name?.toLowerCase().replace(/\s+/g, ' ') || '';
+
             return (
                 contact.includes(search) ||
                 email.includes(search) ||
@@ -68,10 +72,17 @@ const CustomerSearch = ({ onCustomerSelect }) => {
     };
 
     const handleSelectCustomer = (customer) => {
-        setFieldValue('customerSearch', customer.name);
+        setFieldValue('customerSearch', customer.name || '');
         setFilteredCustomers([]);
         setNotFound(false);
         if (onCustomerSelect) onCustomerSelect(customer);
+    };
+
+    const handleClearSearch = () => {
+        setFieldValue('customerSearch', '');
+        setFilteredCustomers([]);
+        setNotFound(false);
+        if (onCustomerSelect) onCustomerSelect(null);
     };
 
     return (
@@ -80,7 +91,7 @@ const CustomerSearch = ({ onCustomerSelect }) => {
                 <Grid size={{ xs: 12, md: 6 }}>
                     <TextField
                         fullWidth
-                        label="Search Customer (by Name / Contact / Email)"
+                        label={`Search ${type === 'sender' ? 'Sender' : 'Receiver'} Customer (by Name / Contact / Email)`}
                         name="customerSearch"
                         value={values.customerSearch}
                         onChange={handleInputChange}
@@ -120,8 +131,8 @@ const CustomerSearch = ({ onCustomerSelect }) => {
                                         onClick={() => handleSelectCustomer(customer)}
                                     >
                                         <ListItemText
-                                            primary={customer.name}
-                                            secondary={`${customer.contactNumber} | ${customer.emailId}`}
+                                            primary={customer.name || 'Unnamed Customer'}
+                                            secondary={`${customer.contactNumber || 'No contact'} | ${customer.emailId || 'No email'}`}
                                         />
                                     </ListItem>
                                 ))}

@@ -152,13 +152,17 @@ const BookingForm = () => {
   const { states, cities } = useSelector((state) => state.location);
   const { list: stations } = useSelector((state) => state.stations);
   const navigate = useNavigate();
-
+  const { createStatus, createError } = useSelector((state) => state.bookings);
 
   useEffect(() => {
     dispatch(fetchStates());
     dispatch(fetchStations());
   }, [dispatch]);
-
+  useEffect(() => {
+    if (createStatus === 'succeeded') {
+      navigate('/booking');
+    }
+  }, [createStatus, navigate]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -169,7 +173,7 @@ const BookingForm = () => {
             setSubmitting(true);
             await dispatch(createBooking(values)).unwrap();
             resetForm();
-            navigate('/booking')
+
           } catch (error) {
             console.log("Error while adding booking", error);
           } finally {

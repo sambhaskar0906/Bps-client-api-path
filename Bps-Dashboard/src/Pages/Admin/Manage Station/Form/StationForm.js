@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFormik } from 'formik';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
@@ -6,21 +6,28 @@ import * as Yup from 'yup';
 import {
   Box, Button, Grid, TextField, InputAdornment, Dialog,
   DialogTitle, DialogContent, DialogActions, IconButton,
-  Typography, MenuItem, Select, FormControl, InputLabel
+  Typography, MenuItem, Select, FormControl, InputLabel,
+  ListItemIcon, ListItemText
 } from '@mui/material';
-import { Close, LocalPhone, Email, Home, LocationOn, PinDrop } from '@mui/icons-material';
+import { Close, LocalPhone, Email, Home, LocationOn, PinDrop, Add, Delete } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
 import { createStation, fetchStations } from '../../../../features/stations/stationSlice';
+import { addOption, getAllOptions, deleteOption } from '../../../../features/addOptionsSlice/addOptionsSlice';
 
 const StationForm = ({ open, onClose }) => {
   const dispatch = useDispatch();
   const { states, cities } = useSelector((state) => state.location);
+  const { options: cityOptions, loading: optionsLoading } = useSelector((state) => state.leadOptions);
+
   const [snackbar, setSnackbar] = React.useState({
     open: false,
     message: '',
-    severity: 'error'  // or 'success', 'info', etc.
+    severity: 'error'
   });
+
+  const [showAddCity, setShowAddCity] = useState(false);
+  const [newCity, setNewCity] = useState('');
 
   const validationSchema = Yup.object().shape({
     stationName: Yup.string().required('Station name is required'),
@@ -54,11 +61,9 @@ const StationForm = ({ open, onClose }) => {
         formik.resetForm();
         onClose();
       } catch (errorPayload) {
-        // errorPayload is the value from rejectWithValue
         const message = typeof errorPayload === 'string'
           ? errorPayload
           : "Something went wrong";
-
         setSnackbar({
           open: true,
           message,
@@ -66,14 +71,14 @@ const StationForm = ({ open, onClose }) => {
         });
       }
     }
-
-
-
   });
 
+  // Fetch states and city options on component mount
   useEffect(() => {
     dispatch(fetchStates());
-  }, []);
+    dispatch(getAllOptions());
+  }, [dispatch]);
+
   // When state changes, fetch cities
   useEffect(() => {
     if (formik.values.state) {
@@ -82,6 +87,89 @@ const StationForm = ({ open, onClose }) => {
       dispatch(clearCities());
     }
   }, [formik.values.state, dispatch]);
+
+  // Filter city options for current state
+  const filteredCityOptions = cityOptions.filter(
+    option => option.fieldName === 'city' && option.fieldState === formik.values.state
+  );
+
+  // Add new city function
+  const handleAddCity = async () => {
+    if (!newCity.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please enter city name',
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (!formik.values.state) {
+      setSnackbar({
+        open: true,
+        message: 'Please select state first',
+        severity: 'error'
+      });
+      return;
+    }
+
+    try {
+      await dispatch(addOption({
+        fieldName: 'city',
+        value: newCity.trim(),
+        fieldState: formik.values.state // Add state reference
+      })).unwrap();
+
+      setNewCity('');
+      setShowAddCity(false);
+
+      setSnackbar({
+        open: true,
+        message: 'City added successfully',
+        severity: 'success'
+      });
+
+      // Refresh options
+      dispatch(getAllOptions());
+
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: error?.message || 'Failed to add city',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Delete city function
+  const handleDeleteCity = async (cityId, cityName) => {
+    if (window.confirm(`Are you sure you want to delete ${cityName}?`)) {
+      try {
+        await dispatch(deleteOption(cityId)).unwrap();
+
+        setSnackbar({
+          open: true,
+          message: 'City deleted successfully',
+          severity: 'success'
+        });
+
+        // If deleted city was selected, clear the selection
+        if (formik.values.city === cityName) {
+          formik.setFieldValue('city', '');
+        }
+
+        // Refresh options
+        dispatch(getAllOptions());
+
+      } catch (error) {
+        setSnackbar({
+          open: true,
+          message: error?.message || 'Failed to delete city',
+          severity: 'error'
+        });
+      }
+    }
+  };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -137,7 +225,7 @@ const StationForm = ({ open, onClose }) => {
                 value={formik.values.emailId}
                 onChange={formik.handleChange}
                 onBlur={formik.handleBlur}
-                error={formik.touched.email && Boolean(formik.errors.emailId)}
+                error={formik.touched.emailId && Boolean(formik.errors.emailId)}
                 helperText={formik.touched.emailId && formik.errors.emailId}
                 InputProps={{
                   startAdornment: (
@@ -171,7 +259,6 @@ const StationForm = ({ open, onClose }) => {
               <FormControl
                 fullWidth
                 error={formik.touched.state && Boolean(formik.errors.state)}
-                sx={{ minWidth: 300 }} // Increase this value as needed
               >
                 <InputLabel id="state-label">State</InputLabel>
                 <Select
@@ -207,7 +294,6 @@ const StationForm = ({ open, onClose }) => {
               <FormControl
                 fullWidth
                 error={formik.touched.city && Boolean(formik.errors.city)}
-                sx={{ minWidth: 300 }}
               >
                 <InputLabel id="city-label">City</InputLabel>
                 <Select
@@ -220,12 +306,49 @@ const StationForm = ({ open, onClose }) => {
                   onBlur={formik.handleBlur}
                   disabled={!formik.values.state}
                 >
-                  {Array.isArray(states) &&
+                  {/* API cities */}
+                  {Array.isArray(cities) &&
                     cities.map((city) => (
-                      <MenuItem key={city} value={city}>
+                      <MenuItem key={`api-${city}`} value={city}>
                         {city}
                       </MenuItem>
                     ))}
+
+                  {/* Custom added cities */}
+                  {filteredCityOptions.map((option) => (
+                    <MenuItem
+                      key={`custom-${option._id}`}
+                      value={option.value}
+                      sx={{ justifyContent: 'space-between' }}
+                    >
+                      {option.value}
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCity(option._id, option.value);
+                        }}
+                        sx={{ ml: 1 }}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </MenuItem>
+                  ))}
+
+                  {/* Add New City Option */}
+                  <MenuItem
+                    onClick={() => setShowAddCity(true)}
+                    sx={{
+                      borderTop: '1px solid #eee',
+                      backgroundColor: '#f5f5f5',
+                      '&:hover': { backgroundColor: '#e0e0e0' }
+                    }}
+                  >
+                    <ListItemIcon>
+                      <Add color="primary" />
+                    </ListItemIcon>
+                    <ListItemText primary="Add New City" />
+                  </MenuItem>
                 </Select>
                 {formik.touched.city && formik.errors.city && (
                   <Typography variant="caption" color="error">
@@ -234,6 +357,40 @@ const StationForm = ({ open, onClose }) => {
                 )}
               </FormControl>
             </Grid>
+
+            {/* Add New City Input */}
+            {showAddCity && (
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', p: 1, bgcolor: '#f9f9f9', borderRadius: 1 }}>
+                  <TextField
+                    size="small"
+                    placeholder="Enter new city name"
+                    value={newCity}
+                    onChange={(e) => setNewCity(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddCity()}
+                    autoFocus
+                  />
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={handleAddCity}
+                    disabled={!newCity.trim()}
+                  >
+                    Add
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setShowAddCity(false);
+                      setNewCity('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Grid>
+            )}
 
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
@@ -252,6 +409,7 @@ const StationForm = ({ open, onClose }) => {
                 }}
               />
             </Grid>
+
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 fullWidth label="GST Number" name="gst"
@@ -283,23 +441,24 @@ const StationForm = ({ open, onClose }) => {
         >
           Save Station
         </Button>
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        >
-          <MuiAlert
-            onClose={() => setSnackbar({ ...snackbar, open: false })}
-            severity={snackbar.severity}
-            sx={{ width: '100%' }}
-            elevation={6}
-            variant="filled"
-          >
-            {snackbar.message}
-          </MuiAlert>
-        </Snackbar>
       </DialogActions>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <MuiAlert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+          elevation={6}
+          variant="filled"
+        >
+          {snackbar.message}
+        </MuiAlert>
+      </Snackbar>
     </Dialog>
   );
 };

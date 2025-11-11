@@ -7,7 +7,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 export const createContact = asyncHandler(async (req, res) => {
   const { name, contactNumber, email, address } = req.body;
 
-  if ([name, contactNumber, email, address].some(field => !field || field.trim() === "")) {
+  if ([name, contactNumber, address].some(field => !field || field.trim() === "")) {
     throw new ApiError(400, "All fields are required");
   }
 
@@ -16,7 +16,7 @@ export const createContact = asyncHandler(async (req, res) => {
     throw new ApiError(409, "Contact with this number already exists");
   }
 
-  const contact = await Contact.create({ name, contactNumber, email, address,createdBy: req.user._id });
+  const contact = await Contact.create({ name, contactNumber, email, address, createdBy: req.user._id });
 
   return res.status(201).json(new ApiResponse(201, "Contact created successfully", contact));
 });

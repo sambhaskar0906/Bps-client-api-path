@@ -12,6 +12,7 @@ import UserReducer from '../features/user/userSlice'
 import ExpenseReducer from '../features/expense/expenseSlice'
 import CustomerLedgerReducer from '../features/customerLedger/customerLedgerSlice'
 import ContactReducer from '../features/contact/contactSlice'
+import leadOptionsReducer from '../features/addOptionsSlice/addOptionsSlice'
 
 export const store = configureStore({
   reducer: {
@@ -28,5 +29,6 @@ export const store = configureStore({
     expenses: ExpenseReducer,
     ledger: CustomerLedgerReducer,
     contact: ContactReducer,
+    leadOptions: leadOptionsReducer,
   },
 });

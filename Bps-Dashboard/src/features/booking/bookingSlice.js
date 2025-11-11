@@ -400,6 +400,9 @@ const initialState = {
   status: 'idle',
   error: null,
   viewedbooking: null,
+  createStatus: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
+  createError: null
+
 };
 const bookingSlice = createSlice({
   name: 'bookings',
@@ -425,19 +428,27 @@ const bookingSlice = createSlice({
   extraReducers: (builder) => {
     builder
       //for booking.
+
       .addCase(createBooking.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+        state.createStatus = 'loading'; // Change this
+        state.createError = null;
+        state.loading = true; // Keep this for backward compatibility
       })
       .addCase(createBooking.fulfilled, (state, action) => {
-        state.status = 'succeeded';
+        state.createStatus = 'succeeded'; // Change this
+        state.status = 'succeeded'; // Keep existing
         state.error = null;
         state.list.push(action.payload);
+        state.loading = false; // Keep existing
       })
       .addCase(createBooking.rejected, (state, action) => {
+        state.createStatus = 'failed'; // Change this
         state.loading = false;
-        state.error = action.payload;
+        state.createError = action.payload; // Change this
+        state.error = action.payload; // Keep existing
       })
+
+
       //for deleting
       .addCase(deleteBooking.fulfilled, (state, action) => {
         state.loading = false;

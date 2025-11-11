@@ -74,6 +74,9 @@ app.use("/api/v2/state", statesAndCitiesRouter);
 import whatsappRoutes from './src/router/whatsappRoute.js';
 app.use('/api/whatsapp', whatsappRoutes);
 
+import addOptions from './src/router/addRouter.js';
+app.use('/api/v2', addOptions);
+
 app.use((err, req, res, next) => {
     let statusCode = err.statusCode || 500;
     let message = err.message || "Internal Server Error";
