@@ -19,9 +19,6 @@ import { FRONTEND_BASE_URL } from "../utils/api";
 
 const Login = () => {
     const dispatch = useDispatch();
-    const navigate = useNavigate();
-    const location = useLocation();
-    const isExpired = new URLSearchParams(location.search).get("expired") === "true";
 
     const [showPassword, setShowPassword] = useState(false);
     const [formData, setFormData] = useState({ emailId: '', password: '' });
@@ -38,36 +35,31 @@ const Login = () => {
         e.preventDefault();
 
         try {
-            // Step 1: Login API
+            // Step 1: Login
             const loginResponse = await dispatch(loginUser(formData)).unwrap();
             const token = loginResponse.message.token;
             localStorage.setItem("authToken", token);
 
-            // Step 2: Fetch user profile
+            // Step 2: Fetch profile
             const profileResponse = await dispatch(fetchUserProfile(token)).unwrap();
             const role = profileResponse.message?.role;
 
-            console.log('✅ Role received from profile:', role);
+            // Step 3: Clear expired flag from URL ✅
+            window.history.replaceState({}, document.title, "/login");
 
-            if (typeof role === 'string' && role.length > 0) {
-                localStorage.setItem("userRole", role);
-            } else {
-                console.warn("⚠️ Role is not a valid string.");
-            }
-
-            // Step 3: Redirect user (admin / supervisor)
-            if (role === 'admin') {
+            if (role === "admin") {
                 window.location.href = `${FRONTEND_BASE_URL}/admin?token=${token}&role=${role}`;
-            } else if (role === 'supervisor') {
+            } else if (role === "supervisor") {
                 window.location.href = `${FRONTEND_BASE_URL}/supervisor?token=${token}&role=${role}`;
             } else {
                 window.location.href = `${FRONTEND_BASE_URL}/?token=${token}`;
             }
 
         } catch (err) {
-            console.error('❌ Login or Profile fetch failed', err);
+            console.error("❌ Login failed", err);
         }
     };
+
 
     return (
         <Box
@@ -106,12 +98,6 @@ const Login = () => {
                     <Typography variant="subtitle1" gutterBottom align="center">
                         Log in to your account
                     </Typography>
-
-                    {isExpired && (
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            Your session has expired. Please log in again.
-                        </Alert>
-                    )}
 
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                     {loading && <CircularProgress sx={{ mb: 2, mx: 'auto' }} />}

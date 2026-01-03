@@ -509,10 +509,18 @@ export const listFinalDeliveries = asyncHandler(async (req, res) => {
   const data = deliveries.map((delivery, i) => ({
     SNo: i + 1,
     orderId: delivery.orderId,
+    fromName: delivery.fromName || "N/A",
+    toName: delivery.toName || "N/A",
     pickup: delivery.pickup,  // Renamed from startStation
     drop: delivery.drop || "N/A",     // Renamed from endStation
+    contact: delivery.contact || "N/A",
     driverName: delivery.driverName || "N/A",
-    vehicle: delivery.vehicleModel || "N/A",              // vehicleId → vehicleName
+    vehicle: delivery.vehicleModel
+      ? {
+        _id: delivery.vehicleModel._id,
+        vehicleModel: delivery.vehicleModel.vehicleModel,
+      }
+      : "N/A",
   }));
 
   res.status(200).json(new ApiResponse(200, data, "Final delivery list fetched successfully."));

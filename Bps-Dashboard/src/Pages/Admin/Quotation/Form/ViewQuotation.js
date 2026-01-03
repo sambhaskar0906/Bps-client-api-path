@@ -8,14 +8,12 @@ import {
     Card,
     CardContent,
     TextField,
-    Avatar,
     Button,
 } from "@mui/material";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { viewBookingById } from "../../../../features/quotation/quotationSlice";
 import { CircularProgress } from "@mui/material";
 import { Home, LocalShipping, InsertDriveFile } from "@mui/icons-material";
@@ -95,17 +93,31 @@ const ViewQuotation = () => {
 
     const data = viewedBooking;
 
+    // ✅ Calculate total insurance
+    const totalInsurance = data.productDetails?.reduce((sum, item) =>
+        sum + (Number(item.insurance) || 0), 0) || 0;
+
     // ✅ Bilty Amount fixed 20 रुपये
     const biltyAmount = 20;
 
-    // ✅ CORRECTED Calculations
-    const billTotal = (data.amount || 0) + biltyAmount;
-    const taxAmount = (billTotal * (data.sTax || 0)) / 100;
+    // ✅ Product Total (price × quantity)
+    const productTotal = data.productDetails?.reduce((sum, item) =>
+        sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0) || 0;
+
+    // ✅ Bill Total = Product Total + Total Insurance + Bilty Amount
+    const billTotal = productTotal + totalInsurance + biltyAmount;
+
+    // ✅ Tax calculation on product value only (not on insurance)
+    const taxAmount = (productTotal * (data.sTax || 0)) / 100;
+
+    // ✅ Grand Total before rounding
     const grandTotalBeforeRound = billTotal + taxAmount;
+
+    // ✅ Round off calculations
     const roundedGrandTotal = Math.round(grandTotalBeforeRound);
     const roundOff = (roundedGrandTotal - grandTotalBeforeRound).toFixed(2);
 
-    console.log("viewedBooking", data);
+    console.log("View Quotation Data:", data);
 
     return (
         <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -120,7 +132,7 @@ const ViewQuotation = () => {
             <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, mx: "auto" }}>
                 <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
                     <Typography variant="h4" fontWeight={600} mb={2}>
-                        Quotation Details
+                        Quotation Details - {data.bookingId}
                     </Typography>
 
                     {/* Booking Info */}
@@ -129,26 +141,25 @@ const ViewQuotation = () => {
                             <SectionHeader icon={<InsertDriveFile />} title="Booking Details" />
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
+                                <StyledTextField label="Booking ID" value={data.bookingId} />
                                 <StyledTextField label="Start Station" value={data.startStationName} />
                                 <StyledTextField label="Destination Station" value={data.endStation} />
                                 <Grid size={{ xs: 12, md: 6 }}>
-                                    <StyledTextField
+                                    <TextField
                                         label="Booking Date"
-                                        value={data.quotationDate}
-                                        readOnly
-                                        renderInput={(params) => (
-                                            <TextField {...params} fullWidth InputProps={{ readOnly: true }} />
-                                        )}
+                                        value={new Date(data.quotationDate).toLocaleDateString('en-IN')}
+                                        fullWidth
+                                        InputProps={{ readOnly: true }}
+                                        sx={{ mb: 2 }}
                                     />
                                 </Grid>
                                 <Grid size={{ xs: 12, md: 6 }}>
-                                    <StyledTextField
+                                    <TextField
                                         label="Proposed Delivery Date"
-                                        value={data.proposedDeliveryDate}
-                                        readOnly
-                                        renderInput={(params) => (
-                                            <TextField {...params} fullWidth InputProps={{ readOnly: true }} />
-                                        )}
+                                        value={new Date(data.proposedDeliveryDate).toLocaleDateString('en-IN')}
+                                        fullWidth
+                                        InputProps={{ readOnly: true }}
+                                        sx={{ mb: 2 }}
                                     />
                                 </Grid>
                             </Grid>
@@ -166,6 +177,7 @@ const ViewQuotation = () => {
                                 <StyledTextField label="Last Name" value={data.lastName} />
                                 <StyledTextField label="Contact Number" value={data.mobile} />
                                 <StyledTextField label="Email" value={data.email} />
+                                <StyledTextField label="Locality" value={data.locality || "-"} />
                             </Grid>
                         </CardContent>
                     </Card>
@@ -196,6 +208,12 @@ const ViewQuotation = () => {
                                 <StyledTextField label="State" value={data.toState} />
                                 <StyledTextField label="City" value={data.toCity} />
                                 <StyledTextField label="Pin Code" value={data.toPincode} />
+                                {data.toContactNumber && (
+                                    <StyledTextField label="Contact Number" value={data.toContactNumber} />
+                                )}
+                                {data.toEmail && (
+                                    <StyledTextField label="Email" value={data.toEmail} />
+                                )}
                             </Grid>
                         </CardContent>
                     </Card>
@@ -206,13 +224,35 @@ const ViewQuotation = () => {
                             <SectionHeader icon={<InsertDriveFile />} title="Product Details" />
                             <Divider sx={{ mb: 2 }} />
                             {Array.isArray(data.productDetails) && data.productDetails.map((item, index) => (
-                                <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
-                                    <StyledTextField label="Product Name" value={item.name} />
-                                    <StyledTextField label="Quantity" value={item.quantity} />
-                                    <StyledTextField label="Weight (Kgs)" value={item.weight} />
-                                    <StyledTextField label="Price" value={item.price} />
-                                    <StyledTextField label="To Pay / Paid" value={item.topay} />
-                                </Grid>
+                                <React.Fragment key={index}>
+                                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1, color: 'primary.main' }}>
+                                        Product {index + 1}
+                                    </Typography>
+                                    <Grid container spacing={2} sx={{ mb: 3, pb: 2, borderBottom: '1px solid #e0e0e0' }}>
+                                        <StyledTextField
+                                            label="Receipt No."
+                                            value={item.receiptNo || "-"}
+                                        />
+                                        <StyledTextField
+                                            label="Ref No."
+                                            value={item.refNo || "-"}
+                                        />
+                                        <StyledTextField label="Product Name" value={item.name} />
+                                        <StyledTextField label="Quantity" value={item.quantity} />
+                                        <StyledTextField label="Weight (Kgs)" value={item.weight} />
+                                        <StyledTextField label="Price (₹)" value={item.price} />
+                                        <StyledTextField label="Insurance (₹)" value={item.insurance || "0"} />
+                                        <StyledTextField
+                                            label="VPP Amount (₹)"
+                                            value={item.vppAmount || "0"}
+                                        />
+                                        <StyledTextField label="Payment Status" value={item.topay} />
+                                        <StyledTextField
+                                            label="Total Value (₹)"
+                                            value={(item.price * item.quantity).toFixed(2)}
+                                        />
+                                    </Grid>
+                                </React.Fragment>
                             ))}
                         </CardContent>
                     </Card>
@@ -223,37 +263,44 @@ const ViewQuotation = () => {
                             <SectionHeader icon={<InsertDriveFile />} title="Financial Summary" />
                             <Divider sx={{ mb: 2 }} />
                             <Grid container spacing={2}>
-                                <StyledTextField label="Sub Total" value={data.amount} />
-                                <StyledTextField label="Bilty Amount" value={biltyAmount} />
+                                <StyledTextField
+                                    label="Product Total (Price × Quantity)"
+                                    value={productTotal.toFixed(2)}
+                                />
+                                <StyledTextField
+                                    label="Total Insurance"
+                                    value={totalInsurance.toFixed(2)}
+                                />
+                                <StyledTextField label="Bilty Amount" value={biltyAmount.toFixed(2)} />
                                 <StyledTextField label="Bill Total" value={billTotal.toFixed(2)} />
-                                <StyledTextField label="Service Tax (%)" value={data.sTax} />
+                                <StyledTextField label="Service Tax (%)" value={data.sTax || "0"} />
                                 <StyledTextField label="Tax Amount" value={taxAmount.toFixed(2)} />
-                                <StyledTextField label="Grand Total (Before Rounding)" value={grandTotalBeforeRound.toFixed(2)} />
+                                <StyledTextField
+                                    label="Tax Note"
+                                    value="Tax calculated on product value only"
+                                />
+                                <StyledTextField
+                                    label="Grand Total (Before Rounding)"
+                                    value={grandTotalBeforeRound.toFixed(2)}
+                                />
                                 <StyledTextField label="Round Off" value={roundOff} />
-                                <StyledTextField label="Final Grand Total" value={roundedGrandTotal} />
+                                <StyledTextField
+                                    label="Final Grand Total"
+                                    value={roundedGrandTotal.toFixed(2)}
+                                    sx={{
+                                        '& .MuiOutlinedInput-root': {
+                                            backgroundColor: '#e3f2fd',
+                                            '& fieldset': {
+                                                borderColor: '#2196f3',
+                                                borderWidth: 2,
+                                            }
+                                        }
+                                    }}
+                                />
                             </Grid>
                         </CardContent>
                     </Card>
 
-                    {/* Comments and Additional Info */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<InsertDriveFile />} title="Additional Info" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <Grid size={{ xs: 12 }}>
-                                    <TextField
-                                        label="Additional Comments"
-                                        value={data.additionalCmt || "No additional comments"}
-                                        fullWidth
-                                        multiline
-                                        minRows={4}
-                                        InputProps={{ readOnly: true }}
-                                    />
-                                </Grid>
-                            </Grid>
-                        </CardContent>
-                    </Card>
                 </Paper>
             </Box>
         </LocalizationProvider>

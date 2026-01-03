@@ -1,5 +1,3 @@
-
-
 import React from "react";
 import {
   Box,
@@ -29,7 +27,6 @@ const Footer = () => {
         spacing={4}
         sx={{
           pb: 4,
-          // px: { xs: 1, sm: 3, md: 6 },
         }}
       >
         {/* CEO Section */}
@@ -48,7 +45,6 @@ const Footer = () => {
           <Typography
             variant="body2"
             sx={{
-
               textAlign: "justify",
               fontSize: { xs: "0.85rem", sm: "0.95rem" },
             }}
@@ -74,11 +70,12 @@ const Footer = () => {
           <Grid container spacing={1}>
             <Grid item xs={6}>
               <List sx={{ p: 0 }}>
-                {["About Us", "Service", "How to Track", "Testimonial"].map(
+                {["About Us", "Services", "How to Track", "Testimonial"].map(
                   (text) => (
                     <ListItem key={text} sx={{ p: 0.5 }}>
                       <Link
-                        href="#"
+                        href={text === "About Us" ? "/about" :
+                          text === "Services" ? "/services" : "#"}
                         color="inherit"
                         underline="hover"
                         fontSize="0.9rem"
@@ -150,7 +147,6 @@ const Footer = () => {
                 borderRadius: 1,
                 input: { color: "#000", fontSize: "1rem" },
                 flex: 1,
-
               }}
             />
             <Button
@@ -182,10 +178,32 @@ const Footer = () => {
             href="https://themeforest.net/user/designthemes"
             color="inherit"
             underline="hover"
+            target="_blank"
+            rel="noopener"
           >
             Spirale infosoft
           </Link>
         </Typography>
+
+        {/* Terms and Privacy Links */}
+        <Box sx={{ mt: 2, display: "flex", justifyContent: "center", gap: 3 }}>
+          <Link
+            href="/terms-and-conditions"
+            color="inherit"
+            underline="hover"
+            sx={{ fontSize: "0.875rem" }}
+          >
+            Terms & Conditions
+          </Link>
+          <Link
+            href="/privacy-policy"
+            color="inherit"
+            underline="hover"
+            sx={{ fontSize: "0.875rem" }}
+          >
+            Privacy Policy
+          </Link>
+        </Box>
       </Box>
     </Box>
   );

@@ -290,6 +290,15 @@ const ViewBooking = () => {
                   InputProps={{ readOnly: true }}
                 />
               </Grid>
+              <Grid size={{ xs: 3, sm: 3, md: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label="Quantity"
+                  value={item.quantity ?? 1}
+                  InputProps={{ readOnly: true }}
+                />
+              </Grid>
               <Grid size={{ xs: 3, sm: 3, md: 1.4 }}>
                 <TextField
                   fullWidth

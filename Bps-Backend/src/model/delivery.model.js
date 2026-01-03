@@ -8,8 +8,8 @@ const deliverySchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  bookingId: { type: String }, // ✅ changed from ObjectId
-  quotationId: { type: String }, // ✅ changed from ObjectId
+  bookingId: { type: String },
+  quotationId: { type: String },
   deliveryType: { type: String, enum: ["Booking", "Quotation"], required: true },
 
   driverId: {

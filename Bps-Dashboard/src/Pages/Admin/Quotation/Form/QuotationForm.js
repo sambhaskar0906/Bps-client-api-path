@@ -39,14 +39,15 @@ const initialValues = {
   startStationName: null,
   endStation: null,
   locality: "",
-  quotationDate: "",
-  proposedDeliveryDate: "",
+  quotationDate: null,
+  proposedDeliveryDate: null,
   fromCustomerName: "",
   fromAddress: "",
   fromState: "",
   fromCity: "",
   fromPincode: "",
   toCustomerName: "",
+  toContactNumber: "",
   toAddress: "",
   toState: "",
   toCity: "",
@@ -60,7 +61,11 @@ const initialValues = {
       quantity: "",
       weight: "",
       price: "",
+      insurance: "",
+      vppAmount: "",
       topay: "none",
+      receiptNo: "",
+      refNo: "",
     },
   ],
 
@@ -71,7 +76,9 @@ const initialValues = {
 
   billTotal: "",
 
-  stax: "",
+  manualInsurance: "",
+  manualVpp: "",
+  sTax: "",
 
   grandTotal: "",
   roundOff: "",
@@ -99,6 +106,33 @@ const QuotationForm = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
+  const getDateBeforeDays = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date;
+  };
+
+  const toDateString = (date) => {
+    if (!date) return "";
+    const d = new Date(date);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const toLocalDateString = (date) => {
+    if (!date) return null;
+
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`; // no timezone shift
+  };
+
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Formik
@@ -106,7 +140,56 @@ const QuotationForm = () => {
         onSubmit={async (values, { resetForm, setSubmitting }) => {
           try {
             setSubmitting(true);
-            await dispatch(createBooking(values)).unwrap();
+
+            // Format product details
+            const formattedProductDetails = values.productDetails.map(item => ({
+              name: item.name,
+              quantity: parseFloat(item.quantity) || 0,
+              weight: parseFloat(item.weight) || 0,
+              price: parseFloat(item.price) || 0,
+              insurance: parseFloat(item.insurance) || 0,
+              vppAmount: parseFloat(item.vppAmount) || 0,
+              topay: item.topay,
+              receiptNo: item.receiptNo || "",
+              refNo: item.refNo || "",
+            }));
+
+            // Calculate ONLY product value (price × quantity) - NO insurance or VPP
+            const totalProductValue = formattedProductDetails.reduce(
+              (sum, item) => sum + item.price,
+              0
+            );
+
+            // Calculate insurance and VPP separately
+            const totalInsurance = formattedProductDetails.reduce((sum, item) =>
+              sum + item.insurance, 0
+            );
+            const totalVppAmount = formattedProductDetails.reduce((sum, item) =>
+              sum + item.vppAmount, 0
+            );
+
+            const biltyAmount = 20;
+
+            // Bill Total = Product Value + Insurance + VPP + Bilty
+            const billTotal = totalProductValue + totalInsurance + totalVppAmount + biltyAmount;
+
+            // Tax calculation on product value only (not on insurance or VPP)
+            const taxAmount = totalProductValue * ((parseFloat(values.sTax) || 0) / 100);
+            const grandTotal = billTotal + taxAmount;
+
+            const payload = {
+              ...values,
+              productDetails: formattedProductDetails,
+              freight: biltyAmount,
+              sTax: parseFloat(values.sTax) || 0,
+              quotationDate: toLocalDateString(values.quotationDate),
+              proposedDeliveryDate: toLocalDateString(values.proposedDeliveryDate),
+              contactNumber: values.contactNumber,
+              email: values.email,
+              toContactNumber: values.toContactNumber || values.contactNumber,
+            };
+
+            await dispatch(createBooking(payload)).unwrap();
             resetForm();
             navigate('/quotation')
           } catch (error) {
@@ -196,7 +279,8 @@ const QuotationForm = () => {
                         label="Booking Date"
                         value={values.quotationDate}
                         onChange={(val) => setFieldValue("quotationDate", val)}
-                        minDate={new Date()}
+                        minDate={getDateBeforeDays(7)}
+                        format="dd/MM/yyyy"
                         slotProps={{
                           textField: {
                             fullWidth: true,
@@ -213,8 +297,11 @@ const QuotationForm = () => {
                       <DatePicker
                         label="Proposed Delivery Date"
                         value={values.proposedDeliveryDate}
-                        onChange={(val) => setFieldValue("proposedDeliveryDate", val)}
-                        minDate={values.quotationDate || new Date()}
+                        onChange={(val) =>
+                          setFieldValue("proposedDeliveryDate", val)
+                        }
+                        minDate={values.quotationDate || getDateBeforeDays(7)}
+                        format="dd/MM/yyyy"
                         slotProps={{
                           textField: {
                             fullWidth: true,
@@ -458,70 +545,197 @@ const QuotationForm = () => {
                     {({ push, remove, form }) => (
                       <>
                         {form.values.productDetails.map((item, index) => (
-                          <Box key={index} sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                            <Field
-                              name={`productDetails[${index}].name`}
-                              as={TextField}
-                              label="Product Name"
-                              fullWidth
-                            />
-                            <Field
-                              name={`productDetails[${index}].quantity`}
-                              as={TextField}
-                              label="Quantity"
-                              type="number"
-                              fullWidth
-                            />
-                            <Field
-                              name={`productDetails[${index}].weight`}
-                              as={TextField}
-                              label="Weight (kg)"
-                              type="number"
-                              fullWidth
-                            />
-                            <Field
-                              name={`productDetails[${index}].price`}
-                              as={TextField}
-                              label="Price"
-                              type="number"
-                              fullWidth
-                            />
-                            <Field
-                              name={`productDetails[${index}].topay`}
-                              as={TextField}
-                              select
-                              label="Topay / Paid"
-                              fullWidth
-                            >
-                              <MenuItem value="paid">Paid</MenuItem>
-                              <MenuItem value="toPay">To Pay</MenuItem>
-                              <MenuItem value="none">None</MenuItem>
-                            </Field>
-                            <IconButton onClick={() => remove(index)}>
-                              <DeleteIcon />
-                            </IconButton>
+                          <Grid container spacing={2} key={index} alignItems="center" sx={{ mb: 2 }}>
+                            {/* Receipt No */}
+                            <Grid size={{ xs: 12, md: 2 }}>
+                              <Field
+                                name={`productDetails[${index}].receiptNo`}
+                                as={TextField}
+                                label="Receipt No."
+                                fullWidth
+                                size="small"
+                              />
+                            </Grid>
+
+                            {/* Ref No */}
+                            <Grid size={{ xs: 12, md: 2 }}>
+                              <Field
+                                name={`productDetails[${index}].refNo`}
+                                as={TextField}
+                                label="Ref No."
+                                fullWidth
+                                size="small"
+                              />
+                            </Grid>
+
+                            {/* Product Name */}
+                            <Grid size={{ xs: 12, md: 3 }}>
+                              <Field
+                                name={`productDetails[${index}].name`}
+                                as={TextField}
+                                label="Product Name"
+                                fullWidth
+                                size="small"
+                              />
+                            </Grid>
+
+                            {/* Quantity */}
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <Field
+                                name={`productDetails[${index}].quantity`}
+                                as={TextField}
+                                label="Quantity"
+                                type="number"
+                                fullWidth
+                                size="small"
+                              />
+                            </Grid>
+
+                            {/* Weight (kg) */}
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <Field
+                                name={`productDetails[${index}].weight`}
+                                as={TextField}
+                                label="Weight (kg)"
+                                type="number"
+                                fullWidth
+                                size="small"
+                              />
+                            </Grid>
+
+                            {/* Insurance */}
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <Field
+                                name={`productDetails[${index}].insurance`}
+                                as={TextField}
+                                label="Insurance"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                                }}
+                              />
+                            </Grid>
+
+                            {/* VPP Amount */}
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <Field
+                                name={`productDetails[${index}].vppAmount`}
+                                as={TextField}
+                                label="VPP Amount"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                                }}
+                              />
+                            </Grid>
+
+                            {/* Price */}
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <Field
+                                name={`productDetails[${index}].price`}
+                                as={TextField}
+                                label="Price"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                InputProps={{
+                                  startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                                }}
+                              />
+                            </Grid>
+
+                            {/* Payment Status */}
+                            <Grid size={{ xs: 12, md: 2 }}>
+                              <Field
+                                name={`productDetails[${index}].topay`}
+                                as={TextField}
+                                select
+                                label="Payment"
+                                fullWidth
+                                size="small"
+                              >
+                                <MenuItem value="paid">Paid</MenuItem>
+                                <MenuItem value="toPay">To Pay</MenuItem>
+                                <MenuItem value="none">None</MenuItem>
+                              </Field>
+                            </Grid>
+
+                            {/* Remove Button */}
+                            <Grid size={{ xs: 12, md: 1 }}>
+                              <IconButton
+                                onClick={() => remove(index)}
+                                fullWidth
+                                color="error"
+                                size="small"
+                                sx={{ border: '1px solid', borderColor: 'error.main' }}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Grid>
+
+                            {/* Add Button (only for first row) */}
+                            {index === 0 && (
+                              <Grid item xs={12}>
+                                <Button
+                                  type="button"
+                                  onClick={() =>
+                                    push({
+                                      receiptNo: "",
+                                      refNo: "",
+                                      name: "",
+                                      quantity: "",
+                                      weight: "",
+                                      insurance: "",
+                                      vppAmount: "",
+                                      price: "",
+                                      topay: "none",
+                                    })
+                                  }
+                                  startIcon={<AddIcon />}
+                                  variant="outlined"
+                                  fullWidth
+                                  sx={{ mt: 1 }}
+                                >
+                                  Add Item
+                                </Button>
+                              </Grid>
+                            )}
+                          </Grid>
+                        ))}
+
+                        {/* Add Item button for when there are no items */}
+                        {form.values.productDetails.length === 0 && (
+                          <Grid item xs={12}>
                             <Button
                               type="button"
                               onClick={() =>
                                 push({
+                                  receiptNo: "",
+                                  refNo: "",
                                   name: "",
                                   quantity: "",
                                   weight: "",
+                                  insurance: "",
+                                  vppAmount: "",
                                   price: "",
                                   topay: "none",
                                 })
                               }
                               startIcon={<AddIcon />}
+                              variant="outlined"
+                              fullWidth
                             >
-                              Add
+                              Add Item
                             </Button>
-                          </Box>
-                        ))}
+                          </Grid>
+                        )}
                       </>
                     )}
                   </FieldArray>
-
-
 
                   <Grid size={{ xs: 12, md: 12 }}>
                     <TextField
@@ -536,43 +750,69 @@ const QuotationForm = () => {
                     />
                   </Grid>
 
-                  {/* Totals Section - Updated with Bilty Amount */}
+                  {/* Totals Section */}
                   <Grid container spacing={2}>
-                    <Grid item xs={12} sm={3}>
+                    {/* Product Value (Only price × quantity) */}
+
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
-                        name="amount"
-                        label="Amount"
-                        value={values.amount}
-                        InputProps={{ readOnly: true }}
+                        name="manualInsurance"
+                        label="Insurance"
+                        value={values.manualInsurance || ""}
+                        onChange={handleChange}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
                         fullWidth
                       />
                     </Grid>
 
-                    {/* Bilty Amount Field Add किया - Always show 20 */}
-                    <Grid item xs={12} sm={3}>
+                    <Grid size={{ xs: 12, md: 2 }}>
+                      <TextField
+                        name="manualVpp"
+                        label="VPP Amount"
+                        value={values.manualVpp || ""}
+                        onChange={handleChange}
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
+                        fullWidth
+                      />
+                    </Grid>
+
+                    {/* Bilty Amount */}
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
                         name="biltyAmount"
                         label="Bilty Amount"
                         value="20"
-                        InputProps={{ readOnly: true }}
+                        InputProps={{
+                          readOnly: true,
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
                         fullWidth
                       />
                     </Grid>
 
-                    <Grid item xs={12} sm={3}>
+                    {/* Bill Total (Product Value + Insurance + VPP + Bilty) */}
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
                         name="billTotal"
                         label="Bill Total"
                         value={values.billTotal}
-                        InputProps={{ readOnly: true }}
+                        InputProps={{
+                          readOnly: true,
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
                         fullWidth
                       />
                     </Grid>
 
-                    <Grid item xs={12} sm={3}>
+                    {/* Tax % */}
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
                         name="sTax"
-                        label="sTax %"
+                        label="Tax %"
                         value={values.sTax}
                         onChange={(e) => {
                           const value = parseFloat(e.target.value);
@@ -582,37 +822,32 @@ const QuotationForm = () => {
                       />
                     </Grid>
 
-                    <Grid item xs={12} sm={3}>
-                      <TextField
-                        name="grandTotal"
-                        label="Grand Total"
-                        value={values.grandTotal}
-                        InputProps={{ readOnly: true }}
-                        fullWidth
-                      />
-                    </Grid>
-
-                    <Grid item xs={12} sm={3}>
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
                         name="roundOff"
                         label="Round Off"
                         value={values.roundOff}
-                        InputProps={{ readOnly: true }}
+                        InputProps={{
+                          readOnly: true,
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
                         fullWidth
                       />
                     </Grid>
 
-                    <Grid item xs={12} sm={3}>
+                    <Grid size={{ xs: 12, md: 2 }}>
                       <TextField
                         name="finalTotal"
                         label="Final Total"
                         value={values.finalTotal}
-                        InputProps={{ readOnly: true }}
+                        InputProps={{
+                          readOnly: true,
+                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
+                        }}
                         fullWidth
                       />
                     </Grid>
                   </Grid>
-
                   <Grid size={{ xs: 12 }}>
                     <Button
                       type="submit"
@@ -738,36 +973,44 @@ const EffectSyncCities = ({ values, dispatch, setSenderCities, setReceiverCities
 
 const EffectSyncTotal = ({ values, setFieldValue }) => {
   useEffect(() => {
-    // Bilty Amount fixed 20 रुपये - हमेशा 20 रहेगा
     const biltyAmount = 20;
 
-    // Calculate total amount from product details
-    const totalAmount = values.productDetails.reduce((sum, item) => {
-      return sum + (parseFloat(item.price) || 0);
-    }, 0);
+    // ✅ 1. Product price ka total (sirf price)
+    const productTotal = values.productDetails.reduce(
+      (sum, item) => sum + (parseFloat(item.price) || 0),
+      0
+    );
 
-    // ✅ CORRECTED: Bill Total = Total Amount + Bilty Amount
-    const billTotal = totalAmount + biltyAmount;
+    // ✅ 2. Bottom se insurance / vpp (optional)
+    const manualInsurance = parseFloat(values.manualInsurance) || 0;
+    const manualVpp = parseFloat(values.manualVpp) || 0;
 
-    // Calculate tax amount (assuming sTax is percentage)
-    const taxPercentage = parseFloat(values.sTax) || 0;
-    const taxAmount = billTotal * (taxPercentage / 100);
+    // ✅ 3. Bill Total
+    const billTotal =
+      productTotal + manualInsurance + manualVpp + biltyAmount;
 
-    // Calculate grand total before rounding
-    const grandTotal = billTotal + taxAmount;
+    // ✅ 4. Tax sirf product value par
+    const taxPercent = parseFloat(values.sTax) || 0;
+    const taxAmount = (productTotal * taxPercent) / 100;
 
-    // Calculate rounded total and round-off
-    const roundedTotal = Math.round(grandTotal);
-    const roundOff = (roundedTotal - grandTotal).toFixed(2);
+    // ✅ 5. Final total
+    const finalTotal = billTotal + taxAmount;
 
-    // Update form values
-    setFieldValue("amount", totalAmount.toFixed(2));
-    setFieldValue("biltyAmount", "20"); // हमेशा 20 set करें
-    setFieldValue("billTotal", billTotal.toFixed(2)); // Bill Total set करें
-    setFieldValue("grandTotal", grandTotal.toFixed(2));
-    setFieldValue("roundOff", roundOff);
-    setFieldValue("finalTotal", roundedTotal.toFixed(2));
-  }, [values.productDetails, values.sTax, setFieldValue]);
+    setFieldValue("biltyAmount", biltyAmount.toFixed(2));
+    setFieldValue("billTotal", billTotal.toFixed(2));
+    setFieldValue("grandTotal", finalTotal.toFixed(2));
+    setFieldValue("roundOff", "0.00");
+    setFieldValue("finalTotal", finalTotal.toFixed(2));
+    setFieldValue("amount", productTotal.toFixed(2)); // optional
+  }, [
+    values.productDetails,
+    values.manualInsurance,
+    values.manualVpp,
+    values.sTax,
+    setFieldValue,
+  ]);
 };
+
+
 
 export default QuotationForm;

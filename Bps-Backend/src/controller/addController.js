@@ -19,12 +19,6 @@ export const addOption = async (req, res) => {
             value: value.trim()
         });
 
-        if (existingOption) {
-            return res.status(400).json({
-                success: false,
-                message: "Option already exists"
-            });
-        }
 
         // Create new option
         const newOption = new LeadOptions({

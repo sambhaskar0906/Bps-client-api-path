@@ -8,6 +8,7 @@ import { sendWhatsAppMessage } from '../services/whatsappServices.js'
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
 import { generateInvoicePDF } from "../utils/invoiceGenerator.js";
+import moment from "moment-timezone";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose"
@@ -111,7 +112,7 @@ export const viewBooking = async (req, res) => {
       mobile: booking.mobile,
       email: booking.email,
       bookingDate: booking.bookingDate
-        ? new Date(booking.bookingDate).toLocaleDateString('en-CA')
+        ? moment(booking.bookingDate).tz("Asia/Kolkata").format("DD/MM/YYYY")
         : null,
       deliveryDate: booking.deliveryDate
         ? new Date(booking.deliveryDate).toLocaleDateString('en-CA')
@@ -672,7 +673,9 @@ export const getBookingStatusList = async (req, res) => {
             : b.createdByRole === 'supervisor'
               ? `Supervisor (${b.startStation?.stationName || 'N/A'})`
               : `${b.createdByRole} ${b.startStation?.stationName || ''}`.trim() || 'N/A',
-      date: b.bookingDate ? new Date(b.bookingDate).toLocaleDateString('en-CA') : 'N/A',
+      date: b.bookingDate
+        ? moment(b.bookingDate).tz("Asia/Kolkata").format("DD/MM/YYYY")
+        : "N/A",
       fromName: b.senderName || 'N/A',
       pickup: b.startStation?.stationName || 'N/A',
       toName: b.receiverName || 'N/A',
@@ -819,7 +822,9 @@ export const getBookingRevenueList = async (req, res) => {
       .map((b, i) => ({
         SNo: i + 1,
         bookingId: b.bookingId,
-        date: b.bookingDate?.toISOString().slice(0, 10) || 'N/A',
+        date: b.bookingDate
+          ? moment(b.bookingDate).tz("Asia/Kolkata").format("DD/MM/YYYY")
+          : "N/A",
         pickup: b.startStation?.stationName || 'Unknown',
         drop: b.endStation?.stationName || 'Unknown',
         revenue: b.grandTotal?.toFixed(2) || '0.00',
@@ -1689,8 +1694,13 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
         paymentStatus,
         items: booking.items?.map(item => ({
           receiptNo: item.receiptNo,
-          amount: item.amount,
-          toPay: item.toPay
+          refNo: item.refNo,
+          quantity: item.quantity,
+          weight: item.weight,
+          insurance: item.insurance,
+          vppAmount: item.vppAmount,
+          toPay: item.toPay,
+          amount: item.amount
         }))
       });
     });

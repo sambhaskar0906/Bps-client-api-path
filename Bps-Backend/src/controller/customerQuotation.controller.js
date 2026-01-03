@@ -7,6 +7,19 @@ import { Customer } from "../model/customer.model.js";
 import manageStation from "../model/manageStation.model.js";
 import { QCustomer } from "../model/Qcustomer.model.js";
 import { parse } from 'date-fns';
+
+const normalizeDate = (inputDate) => {
+  if (!inputDate) return null;
+
+  const [y, m, d] = inputDate.split("-");
+
+  return new Date(Date.UTC(y, m - 1, d));
+};
+
+const formatDateOnly = (date) =>
+  date ? new Date(date).toISOString().slice(0, 10) : null;
+
+
 const formatQuotations = (quotations) => {
   return quotations.map((q, index) => ({
     "orderId": q.orderId || 'N/A',
@@ -15,7 +28,7 @@ const formatQuotations = (quotations) => {
     "orderBy": q.createdByRole === "admin"
       ? "Admin"
       : `Supervisor ${q.startStation?.stationName || ''}`,
-    "Date": q.quotationDate.toLocaleDateString('en-CA'),
+    "Date": formatDateOnly(q.quotationDate),
     "Name": q.customerId
       ? `${q.customerId.firstName} ${q.customerId.lastName}`
       : `${q.firstName || ""} ${q.lastName || ""}`.trim(),
@@ -79,18 +92,21 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     fromState,
     fromPincode,
     toCustomerName,
+    toContactNumber,
     toAddress,
     toCity,
     toState,
     toPincode,
     additionalCmt,
     sTax,
-    sgst, // Added sgst
+    sgst,
     amount,
     productDetails,
     locality,
     grandTotal,
-    freight // Added freight
+    freight,
+    contactNumber,
+    email
   } = req.body;
 
   // Auto-extract name if missing
@@ -148,7 +164,7 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
   const station = await manageStation.findOne({ stationName: startStationName });
   if (!station) return next(new ApiError(404, "Start station not found"));
 
-  // 3. Validate product details
+  // 3. Validate product details (including insurance)
   if (!Array.isArray(productDetails) || productDetails.length === 0) {
     return next(new ApiError(400, "At least one product must be provided"));
   }
@@ -162,23 +178,33 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
       product.price < 0 ||
       typeof product.weight !== 'number' ||
       product.weight < 0 ||
-      !product.topay
+      !product.topay ||
+      (product.insurance !== undefined && (typeof product.insurance !== 'number' || product.insurance < 0))
     ) {
-      return next(new ApiError(400, "Invalid product details. Please check name, quantity, price, weight, and topay fields."));
+      return next(new ApiError(400, "Invalid product details. Please check name, quantity, price, weight, topay, and insurance fields."));
     }
   }
 
   // Calculate grandTotal if not provided
   let calculatedGrandTotal = grandTotal;
   if (!calculatedGrandTotal) {
+    // Calculate product total including insurance
     const productTotal = productDetails.reduce((acc, item) => {
-      return acc + (item.price * item.quantity);
+      const itemTotal = (item.price * item.quantity);
+      const itemInsurance = item.insurance || 0;
+      const itemVpp = item.vppAmount || 0;
+      return acc + itemTotal + itemInsurance;
     }, 0);
 
-    const taxAmount = (productTotal * (Number(sTax) || 0)) / 100;
-    const sgstAmount = (productTotal * (Number(sgst) || 0)) / 100;
+    // Calculate tax only on product value (excluding insurance)
+    const productValueTotal = productDetails.reduce((acc, item) =>
+      acc + (item.price * item.quantity), 0
+    );
 
-    calculatedGrandTotal = productTotal + taxAmount + sgstAmount + (Number(freight) || 0);
+    const taxAmount = (productValueTotal * (Number(sTax) || 0)) / 100;
+    const sgstAmount = (productValueTotal * (Number(sgst) || 0)) / 100;
+
+    calculatedGrandTotal = productTotal + taxAmount + sgstAmount + (Number(freight) || 0) + (Number(amount) || 0);
   }
 
   // 4. Create and Save Quotation
@@ -193,14 +219,15 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     mobile: customer.contactNumber || req.body.contactNumber,
     email: customer.emailId || req.body.email,
     locality: locality || customer.locality || "",
-    quotationDate: new Date(quotationDate),
-    proposedDeliveryDate: new Date(proposedDeliveryDate),
+    quotationDate: normalizeDate(quotationDate),
+    proposedDeliveryDate: normalizeDate(proposedDeliveryDate),
     fromCustomerName: fromCustomerName || `${firstName} ${lastName}`.trim(),
     fromAddress,
     fromCity,
     fromState,
     fromPincode,
     toCustomerName: toCustomerName || fromCustomerName || `${firstName} ${lastName}`.trim(),
+    toContactNumber: toContactNumber || contactNumber,
     toAddress: toAddress || fromAddress,
     toCity: toCity || fromCity,
     toState: toState || fromState,
@@ -212,7 +239,13 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     freight: Number(freight) || 0,
     createdByUser: user._id,
     createdByRole: user.role,
-    productDetails,
+    productDetails: productDetails.map(item => ({
+      ...item,
+      insurance: item.insurance || 0,
+      vppAmount: item.vppAmount || 0,
+      receiptNo: item.receiptNo || "",
+      refNo: item.refNo || ""
+    })),
     grandTotal: calculatedGrandTotal,
   });
 
@@ -220,13 +253,14 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
 
   const formattedQuotation = {
     ...quotation.toObject(),
-    quotationDate: new Date(quotation.quotationDate).toLocaleDateString("en-IN"),
-    proposedDeliveryDate: new Date(quotation.proposedDeliveryDate).toLocaleDateString("en-IN"),
+    quotationDate: formatDateOnly(quotation.quotationDate),
+    proposedDeliveryDate: formatDateOnly(quotation.proposedDeliveryDate),
+    totalInsurance: quotation.totalInsurance, // Include total insurance in response
+    computedTotalRevenue: quotation.computedTotalRevenue // Include computed total
   };
 
   res.status(201).json(new ApiResponse(201, formattedQuotation, "Quotation created successfully"));
 });
-
 
 export const getBookingSummaryByDate = async (req, res) => {
   try {
@@ -238,9 +272,9 @@ export const getBookingSummaryByDate = async (req, res) => {
     }
 
     // ✅ Parse dd-MM-yyyy format correctly
-    const from = parse(fromDate, 'dd-MM-yyyy', new Date());
-    const to = parse(toDate, 'dd-MM-yyyy', new Date());
-    to.setHours(23, 59, 59, 999); // Include entire 'toDate' day
+    const from = new Date(`${fromDate}T00:00:00.000Z`);
+    const to = new Date(`${toDate}T23:59:59.999Z`);
+    to.setHours(23, 59, 59, 999);
 
     // 🧠 Build query
     const query = {
@@ -269,8 +303,6 @@ export const getBookingSummaryByDate = async (req, res) => {
   }
 };
 
-
-
 // Get All Quotations Controller
 export const getAllQuotations = asyncHandler(async (req, res) => {
   const quotations = await Quotation.find()
@@ -291,15 +323,66 @@ export const getQuotationById = asyncHandler(async (req, res, next) => {
 
   if (!quotation) return next(new ApiError(404, "Quotation not found"));
 
-  res.status(200).json(new ApiResponse(200, quotation));
+  // Add virtual fields to response
+  const quotationWithVirtuals = {
+    ...quotation.toObject(),
+    toContactNumber: quotation.toContactNumber || quotation.mobile,
+    totalInsurance: quotation.totalInsurance,
+    totalVppAmount: quotation.totalVppAmount,
+    productTotal: quotation.productTotal,
+    computedTotalRevenue: quotation.computedTotalRevenue
+  };
+
+  res.status(200).json(new ApiResponse(200, quotationWithVirtuals));
 });
+
 
 // Update Quotation Controller
 export const updateQuotation = asyncHandler(async (req, res, next) => {
   const { bookingId } = req.params;
   const updatedData = req.body;
 
-  const updatedQuotation = await Quotation.findOneAndUpdate({ bookingId }, updatedData, { new: true });
+  // If productDetails is being updated, recalculate grandTotal
+  if (updatedData.productDetails) {
+    // Validate product details including insurance
+    for (const product of updatedData.productDetails) {
+      if (
+        (product.insurance !== undefined && (typeof product.insurance !== 'number' || product.insurance < 0)) ||
+        (product.vppAmount !== undefined && (typeof product.vppAmount !== 'number' || product.vppAmount < 0)) // ADD THIS
+      ) {
+        return next(new ApiError(400, "Insurance and vppAmount must be non-negative numbers"));
+      }
+    }
+    // Get existing quotation to calculate with current tax rates
+    const existingQuotation = await Quotation.findOne({ bookingId });
+    if (existingQuotation) {
+      // Calculate product total including insurance
+      const productTotal = updatedData.productDetails.reduce((acc, item) => {
+        const itemTotal = (item.price * item.quantity);
+        const itemInsurance = item.insurance || 0;
+        const itemVpp = item.vppAmount || 0;
+        return acc + itemTotal + itemInsurance;
+      }, 0);
+
+      // Calculate tax only on product value (excluding insurance)
+      const productValueTotal = updatedData.productDetails.reduce((acc, item) =>
+        acc + (item.price * item.quantity), 0
+      );
+
+      const taxAmount = (productValueTotal * (existingQuotation.sTax || 0)) / 100;
+      const sgstAmount = (productValueTotal * (existingQuotation.sgst || 0)) / 100;
+
+      updatedData.grandTotal = productTotal + taxAmount + sgstAmount +
+        (existingQuotation.freight || 0) +
+        (existingQuotation.amount || 0);
+    }
+  }
+
+  const updatedQuotation = await Quotation.findOneAndUpdate(
+    { bookingId },
+    updatedData,
+    { new: true }
+  );
 
   if (!updatedQuotation) return next(new ApiError(404, "Quotation not found"));
 
@@ -345,7 +428,6 @@ export const getTotalCancelled = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, { totalCancelled: total }));
 });
 
-
 export const getTotalRevenue = asyncHandler(async (req, res) => {
   const quotations = await Quotation.find();
 
@@ -355,10 +437,8 @@ export const getTotalRevenue = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, { totalRevenue }));
 });
 
-
-
 export const searchQuotationByBookingId = asyncHandler(async (req, res, next) => {
-  const { bookingId } = req.params;  // Get the bookingId from the route parameter
+  const { bookingId } = req.params;
 
   if (!bookingId) {
     return next(new ApiError(400, "Booking ID is required"));
@@ -372,8 +452,10 @@ export const searchQuotationByBookingId = asyncHandler(async (req, res, next) =>
   if (!quotation) {
     return next(new ApiError(404, "Quotation not found with the provided Booking ID"));
   }
+
   const formatDate = (date) =>
-    new Date(date).toLocaleDateString("en-CA");
+    date ? new Date(date).toISOString().slice(0, 10) : null;
+
 
   if (quotation.quotationDate) {
     quotation.quotationDate = formatDate(quotation.quotationDate);
@@ -382,7 +464,19 @@ export const searchQuotationByBookingId = asyncHandler(async (req, res, next) =>
   if (quotation.proposedDeliveryDate) {
     quotation.proposedDeliveryDate = formatDate(quotation.proposedDeliveryDate);
   }
-  res.status(200).json(new ApiResponse(200, quotation));
+
+  // Calculate insurance total for the response
+  const totalInsurance = quotation.productDetails.reduce((acc, item) =>
+    acc + (item.insurance || 0), 0
+  );
+
+  res.status(200).json(new ApiResponse(200, {
+    ...quotation,
+    toContactNumber: quotation.toContactNumber || quotation.mobile,
+    totalInsurance,
+    productTotal: quotation.productTotal,
+    computedTotalRevenue: quotation.computedTotalRevenue
+  }));
 });
 
 export const getActiveList = asyncHandler(async (req, res) => {
@@ -424,30 +518,60 @@ const getRevenueBookingFilter = (type, user) => {
 };
 
 // Controller to get revenue details from quotations
-// Controller to get total revenue from quotations
 export const getRevenue = asyncHandler(async (req, res) => {
   const filter = getRevenueBookingFilter(req.query.type, req.user);
   const quotations = await Quotation.find(filter)
-    .select('bookingId quotationDate startStationName endStation grandTotal computedTotalRevenue amount sTax')
+    .select('bookingId quotationDate startStationName endStation grandTotal computedTotalRevenue amount sTax productDetails')
     .lean();
 
-  // Calculate grandTotal = amount + sTax (use this instead of grandTotal field)
-  const totalRevenue = quotations.reduce(
-    (sum, q) => sum + ((q.amount || 0) + (q.sTax || 0)),
-    0
-  );
+  // Calculate revenue including insurance
+  const totalRevenue = quotations.reduce((sum, q) => {
+    // Calculate product value total
+    const productValueTotal = q.productDetails.reduce((acc, item) =>
+      acc + (item.price * item.quantity), 0
+    );
 
-  console.log("Total Revenue:", totalRevenue);
+    // Calculate total insurance
+    const totalInsurance = q.productDetails.reduce((acc, item) =>
+      acc + (item.insurance || 0), 0
+    );
+    const totalVppAmount = q.productDetails.reduce((acc, item) =>
+      acc + (item.vppAmount || 0), 0
+    );
+    // Calculate tax on product value only
+    const taxAmount = (productValueTotal * (q.sTax || 0)) / 100;
+
+    // Total revenue = product value + insurance + tax
+    return sum + productValueTotal + totalInsurance + totalVppAmount + taxAmount + (q.amount || 0);
+  }, 0);
+
+  console.log("Total Revenue (including insurance):", totalRevenue);
 
   const data = quotations.map((q, index) => {
-    const grandTotal = (q.amount || 0) + (q.sTax || 0);
+    // Calculate for each quotation
+    const productValueTotal = q.productDetails.reduce((acc, item) =>
+      acc + (item.price * item.quantity), 0
+    );
+    const totalInsurance = q.productDetails.reduce((acc, item) =>
+      acc + (item.insurance || 0), 0
+    );
+    const totalVppAmount = q.productDetails.reduce((acc, item) =>
+      acc + (item.vppAmount || 0), 0
+    );
+    const taxAmount = (productValueTotal * (q.sTax || 0)) / 100;
+    const revenue = productValueTotal + totalInsurance + totalVppAmount + taxAmount + (q.amount || 0);
+
     return {
       SNo: index + 1,
       bookingId: q.bookingId,
       date: q.quotationDate ? new Date(q.quotationDate).toISOString().slice(0, 10) : 'N/A',
       pickup: q.startStationName || 'Unknown',
       drop: q.endStation || 'Unknown',
-      revenue: grandTotal.toFixed(2),
+      productValue: productValueTotal.toFixed(2),
+      insurance: totalInsurance.toFixed(2),
+      vppAmount: totalVppAmount.toFixed(2),
+      tax: taxAmount.toFixed(2),
+      revenue: revenue.toFixed(2),
     };
   });
 
@@ -515,12 +639,9 @@ const transporter = nodemailer.createTransport({
 });
 
 export const sendBookingEmail = async (email, booking) => {
-
-
   const {
     firstName,
     lastName,
-
     fromAddress,
     fromCity,
     fromState,
@@ -530,13 +651,16 @@ export const sendBookingEmail = async (email, booking) => {
     toCity,
     toPincode,
     productDetails,
-    amount
+    amount,
+    grandTotal,
+    totalInsurance
   } = booking;
 
   let productDetailsText = '';
   productDetails.forEach(product => {
-    productDetailsText += `\nName: ${product.name}, Weight: ${product.weight}, Quantity: ${product.quantity}, Price: ${product.price}`;
+    productDetailsText += `\nName: ${product.name}, Weight: ${product.weight}, Quantity: ${product.quantity}, Price: ${product.price}, Insurance: ₹${product.insurance || 0}`;
   });
+
   const mailOptions = {
     from: process.env.gmail,
     to: email,
@@ -548,24 +672,43 @@ export const sendBookingEmail = async (email, booking) => {
         <p><strong>From Address:</strong> ${fromAddress}, ${fromCity}, ${fromState}, ${fromPincode}</p>
         <p><strong>To Address:</strong> ${toAddress}, ${toCity}, ${toState}, ${toPincode}</p>
         <h3>Product Details:</h3>
-        <ul>
-          ${productDetails.map(product => `
-            <li><strong>Name:</strong> ${product.name}, <strong>Weight:</strong> ${product.weight}, <strong>Quantity:</strong> ${product.quantity}, <strong>Price:</strong> ${product.price}</li>
-          `).join('')}
-        </ul>
-        <p><strong>Grand Total:</strong> ${amount}</p>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse;">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Weight</th>
+              <th>Quantity</th>
+              <th>Price</th>
+              <th>Insurance</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${productDetails.map(product => `
+              <tr>
+                <td>${product.name}</td>
+                <td>${product.weight}</td>
+                <td>${product.quantity}</td>
+                <td>₹${product.price}</td>
+                <td>₹${product.insurance || 0}</td>
+                <td>₹${(product.price * product.quantity) + (product.insurance || 0)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${totalInsurance > 0 ? `<p><strong>Total Insurance:</strong> ₹${totalInsurance}</p>` : ''}
+        <p><strong>Grand Total:</strong> ₹${grandTotal || amount}</p>
         <p>Thank you for choosing our service.</p>
         <p>Best regards,<br>BharatParcel Team</p>
       `
   };
+
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Booking confirmation email sent to ${email}`);
   } catch (error) {
     console.error('Error sending booking confirmation email:', error);
   }
-
-
 };
 export const sendBookingEmailById = async (req, res) => {
   const { bookingId } = req.params;

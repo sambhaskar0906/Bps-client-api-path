@@ -286,7 +286,6 @@ export const fetchInvoicesByFilter = createAsyncThunk(
     }
   }
 );
-// bookingSlice.js (top part with other thunks)
 export const fetchIncomingBookings = createAsyncThunk(
   'bookings/fetchIncomingBookings',
   async ({ fromDate, toDate }, { rejectWithValue }) => {
@@ -333,7 +332,6 @@ export const listDeletedBookings = createAsyncThunk(
     }
   }
 );
-
 
 const initialState = {
   list: [],

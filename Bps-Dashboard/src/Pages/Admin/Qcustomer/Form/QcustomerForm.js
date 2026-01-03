@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import {
@@ -15,17 +15,31 @@ import {
     Card,
     CardContent,
     Divider,
-    FormHelperText
+    FormHelperText,
+    Snackbar,
+    Alert
 } from '@mui/material';
 import { CloudUpload } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
 import { createCustomer } from '../../../../features/qcustomers/qcustomerSlice'
+import { addOption } from "../../../../features/addOptionsSlice/addOptionsSlice"; // addOption import करें
 import { useNavigate } from 'react-router-dom';
+
 const QcustomerForm = () => {
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const { states, cities } = useSelector((state) => state.location);
+
+    // New state for city management
+    const [addingCity, setAddingCity] = useState(false);
+    const [newCity, setNewCity] = useState("");
+    const [availableCities, setAvailableCities] = useState([]);
+    const [snackbar, setSnackbar] = useState({
+        open: false,
+        message: '',
+        severity: 'error'
+    });
 
     // Validation Schema
     const validationSchema = Yup.object().shape({
@@ -48,6 +62,93 @@ const QcustomerForm = () => {
         idProofPhoto: Yup.mixed().required('ID Photo is required'),
         customerProfilePhoto: Yup.mixed().required('Customer Photo is required')
     });
+
+    // Function to handle adding new city
+    const handleAddCity = async () => {
+        // Basic validation
+        if (!formik.values.state) {
+            setSnackbar({
+                open: true,
+                message: "Please select a state first.",
+                severity: 'warning'
+            });
+            return;
+        }
+
+        const trimmed = newCity?.trim();
+        if (!trimmed) {
+            setSnackbar({
+                open: true,
+                message: "Please enter a city name.",
+                severity: 'warning'
+            });
+            return;
+        }
+
+        try {
+            setAddingCity(true);
+
+            const payload = {
+                field: "city",
+                fieldName: "city",
+                name: trimmed,
+                value: trimmed,
+                state: formik.values.state
+            };
+
+            // Call addOption action
+            const addRes = await dispatch(addOption(payload)).unwrap();
+
+            // Extract created city name from response
+            const createdName =
+                addRes?.data?.value ??
+                addRes?.value ??
+                addRes?.data ??
+                (typeof addRes === 'string' ? addRes : null) ??
+                trimmed;
+
+            // Re-fetch cities from server for the given state
+            const fetchRes = await dispatch(fetchCities(formik.values.state)).unwrap();
+
+            // Normalize fetch result to an array
+            const fetchedCities = Array.isArray(fetchRes) ? fetchRes : (fetchRes?.data || []);
+
+            // Ensure createdName is present (case-insensitive dedupe)
+            const addIfMissing = (arr, name) => {
+                const found = arr.find(c => String(c).toLowerCase() === String(name).toLowerCase());
+                if (found) return arr;
+                return [...arr, name];
+            };
+
+            const updated = addIfMissing(fetchedCities, createdName);
+            setAvailableCities(updated);
+
+            // Set the new city as selected
+            formik.setFieldValue('city', createdName);
+
+            // Reset input
+            setNewCity("");
+
+            // Show success message
+            setSnackbar({
+                open: true,
+                message: `City "${createdName}" added successfully!`,
+                severity: 'success'
+            });
+
+        } catch (err) {
+            console.error("Failed to add city:", err);
+            const message = err?.message || err?.data?.message || JSON.stringify(err) || "Failed to add city";
+
+            setSnackbar({
+                open: true,
+                message: message,
+                severity: 'error'
+            });
+        } finally {
+            setAddingCity(false);
+        }
+    };
 
     // Formik setup
     const formik = useFormik({
@@ -72,26 +173,55 @@ const QcustomerForm = () => {
         onSubmit: async (values) => {
             try {
                 await dispatch(createCustomer(values)).unwrap();
+
+                // Show success message
+                setSnackbar({
+                    open: true,
+                    message: "Customer registered successfully!",
+                    severity: 'success'
+                });
+
                 formik.resetForm();
-                navigate('/qcustomer')
+
+                // Navigate after 1.5 seconds
+                setTimeout(() => {
+                    navigate('/qcustomer');
+                }, 1500);
             }
             catch (error) {
                 console.log("Error while adding customer", error);
+                const errMsg = error?.message || "Something went wrong while adding the customer.";
+
+                setSnackbar({
+                    open: true,
+                    message: errMsg,
+                    severity: 'error'
+                });
             }
         }
     });
+
+    // Fetch states on component mount
     useEffect(() => {
         dispatch(fetchStates());
-    }, [])
+    }, []);
 
+    // Fetch cities when state changes
     useEffect(() => {
         if (formik.values.state) {
-            dispatch(fetchCities(formik.values.state));
-        }
-        else {
+            dispatch(fetchCities(formik.values.state))
+                .unwrap()
+                .then((res) => {
+                    const fetchedCities = Array.isArray(res) ? res : (res?.data || []);
+                    setAvailableCities(fetchedCities);
+                })
+                .catch(console.error);
+        } else {
             dispatch(clearCities());
+            setAvailableCities([]);
+            formik.setFieldValue('city', '');
         }
-    }, [formik.values.state, dispatch])
+    }, [formik.values.state, dispatch]);
 
     const handleFileChange = (field, file) => {
         formik.setFieldValue(field, file);
@@ -178,7 +308,7 @@ const QcustomerForm = () => {
                                         <Grid size={{ xs: 12, md: 6 }}>
                                             <TextField
                                                 fullWidth
-                                                label="Email ID *"
+                                                label="Email ID"
                                                 type="email"
                                                 variant="outlined"
                                                 name="emailId"
@@ -264,7 +394,7 @@ const QcustomerForm = () => {
                                                     label="City *"
                                                     sx={{ minWidth: 300 }}
                                                 >
-                                                    {Array.isArray(states) && cities.map((city) => (
+                                                    {availableCities.map((city) => (
                                                         <MenuItem key={city} value={city}>{city}</MenuItem>
                                                     ))}
                                                 </Select>
@@ -272,6 +402,32 @@ const QcustomerForm = () => {
                                                     <FormHelperText>{formik.errors.city}</FormHelperText>
                                                 )}
                                             </FormControl>
+
+                                            {/* Add new city input - City dropdown के नीचे */}
+                                            <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                                                <TextField
+                                                    size="small"
+                                                    fullWidth
+                                                    placeholder="Add new city for selected state"
+                                                    value={newCity}
+                                                    onChange={(e) => setNewCity(e.target.value)}
+                                                    disabled={addingCity || !formik.values.state}
+                                                    onKeyPress={(e) => {
+                                                        if (e.key === 'Enter' && formik.values.state && newCity.trim()) {
+                                                            e.preventDefault();
+                                                            handleAddCity();
+                                                        }
+                                                    }}
+                                                />
+                                                <Button
+                                                    variant="contained"
+                                                    onClick={handleAddCity}
+                                                    disabled={addingCity || !formik.values.state || !newCity.trim()}
+                                                    sx={{ minWidth: '80px' }}
+                                                >
+                                                    {addingCity ? 'Adding...' : 'Add'}
+                                                </Button>
+                                            </Box>
                                         </Grid>
                                         <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                                             <TextField
@@ -430,6 +586,24 @@ const QcustomerForm = () => {
                     </Grid>
                 </form>
             </Paper>
+
+            {/* Snackbar for notifications */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={6000}
+                onClose={() => setSnackbar({ ...snackbar, open: false })}
+                anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+            >
+                <Alert
+                    onClose={() => setSnackbar({ ...snackbar, open: false })}
+                    severity={snackbar.severity}
+                    sx={{ width: '100%' }}
+                    elevation={6}
+                    variant="filled"
+                >
+                    {snackbar.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 };

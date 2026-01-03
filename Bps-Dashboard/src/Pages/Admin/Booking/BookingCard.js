@@ -101,6 +101,23 @@ const revenueHeadCells = [
   { id: "action", label: "Action", sortable: false },
 ];
 
+const formatDate = (date) => {
+  if (!date) return "-";
+
+  if (typeof date === "string" && date.includes("/")) {
+    return date;
+  }
+
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "-";
+
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+
 const BookingCard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -470,7 +487,9 @@ const BookingCard = () => {
                       <>
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.bookingId}</TableCell>
-                        <TableCell>{row.date}</TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          {row.date || "-"}
+                        </TableCell>
                         <TableCell>{row.pickup}</TableCell>
                         <TableCell>{row.drop}</TableCell>
                         <TableCell>{row.revenue}</TableCell>
@@ -501,7 +520,9 @@ const BookingCard = () => {
                         )}
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
                         <TableCell>{row.orderBy}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.date}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                          {formatDate(row.date)}
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.fromName}</TableCell>
                         <TableCell>{row.pickup}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>{row.toName}</TableCell>

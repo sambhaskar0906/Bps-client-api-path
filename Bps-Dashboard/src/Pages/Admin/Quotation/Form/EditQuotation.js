@@ -48,7 +48,11 @@ const initialValues = {
         quantity: "",
         price: "",
         weight: "",
-        toPayPaid: "None",
+        insurance: "",
+        vppAmount: "",
+        topay: "",
+        receiptNo: "",
+        refNo: "",
     }],
     addComment: "",
     ins_vpp: "",
@@ -135,6 +139,15 @@ const EditQuotationForm = () => {
                     const handleUpdate = (index) => {
                         const item = values.productDetails[index];
 
+                        if (item.vppAmount !== undefined && (isNaN(item.vppAmount) || parseFloat(item.vppAmount) < 0)) {
+                            setSnackbar({
+                                open: true,
+                                message: "VPP Amount must be a non-negative number",
+                                severity: "error",
+                            });
+                            return;
+                        }
+
                         if (!item.quantity || !item.weight || !item.price) {
                             setSnackbar({
                                 open: true,
@@ -162,7 +175,7 @@ const EditQuotationForm = () => {
                             >
                                 Back
                             </Button>
-                            <Box sx={{ p: 3, maxWidth: 1200, mx: "auto" }}>
+                            <Box sx={{ p: 3, maxWidth: 1400, mx: "auto" }}>
                                 <Grid container spacing={2}>
                                     <Grid size={{ xs: 12, sm: 6 }}>
                                         <TextField
@@ -385,7 +398,27 @@ const EditQuotationForm = () => {
                                                         <Grid size={{ xs: 0.5 }}>
                                                             <Typography>{index + 1}.</Typography>
                                                         </Grid>
-                                                        <Grid size={{ xs: 12, sm: 3, md: 2.5 }}>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
+                                                            <Field
+                                                                as={TextField}
+                                                                fullWidth
+                                                                size="small"
+                                                                label="Receipt No"
+                                                                name={`productDetails[${index}].receiptNo`}
+                                                                value={item.receiptNo || ""}
+                                                            />
+                                                        </Grid>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
+                                                            <Field
+                                                                as={TextField}
+                                                                fullWidth
+                                                                size="small"
+                                                                label="Ref No"
+                                                                name={`productDetails[${index}].refNo`}
+                                                                value={item.refNo || ""}
+                                                            />
+                                                        </Grid>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 2 }}>
                                                             <Field
                                                                 as={TextField}
                                                                 fullWidth
@@ -395,7 +428,7 @@ const EditQuotationForm = () => {
                                                                 value={item.name}
                                                             />
                                                         </Grid>
-                                                        <Grid size={{ xs: 12, sm: 3, md: 2.5 }}>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
                                                             <Field
                                                                 as={TextField}
                                                                 fullWidth
@@ -406,18 +439,7 @@ const EditQuotationForm = () => {
                                                                 type="number"
                                                             />
                                                         </Grid>
-                                                        <Grid size={{ xs: 12, sm: 3, md: 2.5 }}>
-                                                            <Field
-                                                                as={TextField}
-                                                                fullWidth
-                                                                size="small"
-                                                                label="Price"
-                                                                name={`productDetails[${index}].price`}
-                                                                value={item.price}
-                                                                type="number"
-                                                            />
-                                                        </Grid>
-                                                        <Grid size={{ xs: 12, sm: 3, md: 2.5 }}>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
                                                             <Field
                                                                 as={TextField}
                                                                 fullWidth
@@ -429,16 +451,52 @@ const EditQuotationForm = () => {
                                                             />
                                                         </Grid>
                                                         <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
-                                                            <TextField
+                                                            <Field
+                                                                as={TextField}
+                                                                fullWidth
+                                                                size="small"
+                                                                label="Price"
+                                                                name={`productDetails[${index}].price`}
+                                                                value={item.price}
+                                                                type="number"
+                                                            />
+                                                        </Grid>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
+                                                            <Field
+                                                                as={TextField}
+                                                                fullWidth
+                                                                size="small"
+                                                                label="Insurance"
+                                                                name={`productDetails[${index}].insurance`}
+                                                                value={item.insurance || ""}
+                                                                type="number"
+                                                            />
+                                                        </Grid>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
+                                                            <Field
+                                                                as={TextField}
+                                                                fullWidth
+                                                                size="small"
+                                                                label="VPP Amount"
+                                                                name={`productDetails[${index}].vppAmount`}
+                                                                value={item.vppAmount || ""}
+                                                                type="number"
+                                                            />
+                                                        </Grid>
+                                                        <Grid size={{ xs: 12, sm: 3, md: 1.5 }}>
+                                                            <Field
+                                                                as={TextField}
                                                                 select
                                                                 fullWidth
                                                                 size="small"
-                                                                label="To Pay/Paid"
-                                                                name={`productDetails[${index}].toPayPaid`}
-                                                                value={item.toPayPaid}
-                                                                onChange={handleChange}
+                                                                label="Payment Status"
+                                                                name={`productDetails[${index}].topay`}
+                                                                value={item.topay || "none"}
                                                             >
-                                                            </TextField>
+                                                                <MenuItem value="paid">Paid</MenuItem>
+                                                                <MenuItem value="toPay">To Pay</MenuItem>
+                                                                <MenuItem value="none">None</MenuItem>
+                                                            </Field>
                                                         </Grid>
                                                         <Grid size={{ xs: 3, sm: 1.5, md: 1 }}>
                                                             <Button
@@ -474,9 +532,13 @@ const EditQuotationForm = () => {
                                                             push({
                                                                 name: "",
                                                                 quantity: "",
+                                                                insurance: "",
+                                                                vppAmount: "",
                                                                 price: "",
                                                                 weight: "",
-                                                                toPayPaid: "None",
+                                                                topay: "",
+                                                                receiptNo: "",
+                                                                refNo: "",
                                                             })
                                                         }
                                                     >

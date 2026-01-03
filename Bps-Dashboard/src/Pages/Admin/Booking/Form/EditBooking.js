@@ -50,6 +50,7 @@ const initialValues = {
     {
       receiptNo: "",
       refNo: "",
+      quantity: "",
       insurance: "",
       vppAmount: "",
       toPay: "",
@@ -154,6 +155,7 @@ const validationSchema = Yup.object().shape({
     Yup.object().shape({
       receiptNo: Yup.string().required("Receipt No is required"),
       refNo: Yup.string().required("Reference No is required"),
+      quantity: Yup.number().min(1).required(),
       insurance: Yup.number()
         .typeError("Insurance must be a number")
         .min(0, "Cannot be negative"),
@@ -639,6 +641,20 @@ const EditBooking = () => {
                               helperText={touched.items?.[index]?.refNo && errors.items?.[index]?.refNo}
                             />
                           </Grid>
+                          <Grid size={{ xs: 12, md: 1.2 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label="Quantity"
+                              name={`items[${index}].quantity`}
+                              value={item.quantity}
+                              onChange={handleChange}
+                              type="number"
+                              inputProps={{ min: 1 }}
+                              error={touched.items?.[index]?.quantity && Boolean(errors.items?.[index]?.quantity)}
+                              helperText={touched.items?.[index]?.quantity && errors.items?.[index]?.quantity}
+                            />
+                          </Grid>
                           <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
@@ -722,6 +738,7 @@ const EditBooking = () => {
                             push({
                               receiptNo: "",
                               refNo: "",
+                              quantity: "",
                               insurance: "",
                               vppAmount: "",
                               toPay: "pay",

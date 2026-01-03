@@ -10,6 +10,12 @@ const ItemSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  quantity: {
+    type: Number,
+    required: true,
+    min: 1,
+    default: 1
+  },
   insurance: {
     type: Number,
     required: true

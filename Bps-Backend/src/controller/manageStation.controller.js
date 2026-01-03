@@ -6,14 +6,14 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 // Create Station
 const createManageStation = asyncHandler(async (req, res) => {
 
-  const { stationName, contact, emailId, address, state, city, pincode, gst } = req.body;
+  const { stationName, stationCode, contact, emailId, address, state, city, pincode, gst } = req.body;
 
-  if ([stationName, contact, emailId, address, state, city, pincode].some(field => typeof field === 'string' && field.trim() === "")) {
+  if ([stationName, stationCode, contact, emailId, address, state, city, pincode].some(field => typeof field === 'string' && field.trim() === "")) {
     throw new ApiError(400, "All fields are compulsory");
   }
 
   const existedStation = await manageStation.findOne({
-    $or: [{ stationName }, { emailId }, { contact }]
+    $or: [{ stationName }, { stationCode }, { emailId }, { contact }]
   });
 
   if (existedStation) {
@@ -21,6 +21,9 @@ const createManageStation = asyncHandler(async (req, res) => {
 
     if (existedStation.stationName === stationName) {
       fieldErrors.stationName = "Station name already exists";
+    }
+    if (existedStation.stationCode === stationCode) {
+      fieldErrors.stationCode = "Station code already exists";
     }
     if (existedStation.emailId === emailId) {
       fieldErrors.emailId = "Email already exists";
@@ -37,6 +40,7 @@ const createManageStation = asyncHandler(async (req, res) => {
 
   const station = await manageStation.create({
     stationName,
+    stationCode,
     emailId,
     contact,
     address,
@@ -64,6 +68,7 @@ const getAllStations = asyncHandler(async (req, res) => {
     sNo: index + 1,
     stationId: station.stationId,
     stationName: station.stationName,
+    stationCode: station.stationCode,
     contactNumber: station.contact
   }));
 
@@ -97,19 +102,52 @@ const searchStationById = asyncHandler(async (req, res, next) => {
 const updateStation = asyncHandler(async (req, res) => {
   const stationId = req.params.id;
 
+  const allowedFields = [
+    "stationName",
+    "stationCode",
+    "contact",
+    "emailId",
+    "address",
+    "state",
+    "city",
+    "pincode",
+    "gst"
+  ];
+
+  const updates = {};
+  allowedFields.forEach(field => {
+    if (req.body[field] !== undefined) {
+      updates[field] = req.body[field];
+    }
+  });
+
+  // Duplicate stationCode check
+  if (updates.stationCode) {
+    const exists = await manageStation.findOne({
+      stationCode: updates.stationCode,
+      stationId: { $ne: stationId }
+    });
+
+    if (exists) {
+      throw new ApiError(409, "Station code already exists");
+    }
+  }
+
   const updatedStation = await manageStation.findOneAndUpdate(
-    { stationId: stationId },
-    req.body,
+    { stationId },
+    updates,
     { new: true, runValidators: true }
   );
 
   if (!updatedStation) {
-    console.log("Station not found in DB for ID:", stationId);
     throw new ApiError(404, "Station not found");
   }
 
-  return res.status(200).json(new ApiResponse(200, "Station updated successfully", updatedStation));
+  return res.status(200).json(
+    new ApiResponse(200, "Station updated successfully", updatedStation)
+  );
 });
+
 
 // Delete Station
 const deleteStation = asyncHandler(async (req, res) => {
@@ -131,7 +169,9 @@ const searchStationByName = asyncHandler(async (req, res, next) => {
     return next(new ApiError(400, "Station name is required"));
   }
 
-  const station = await manageStation.findOne({ stationName });
+  const station = await manageStation.findOne({
+    stationName: { $regex: `^${stationName}$`, $options: "i" }
+  });
 
   if (!station) {
     return next(new ApiError(404, "Station not found with the provided name"));
@@ -139,8 +179,6 @@ const searchStationByName = asyncHandler(async (req, res, next) => {
 
   res.status(200).json(new ApiResponse(200, station));
 });
-
-
 
 
 export {

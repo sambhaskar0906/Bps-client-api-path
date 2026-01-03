@@ -64,6 +64,9 @@ const quotationSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  toContactNumber: {
+    type: String,
+  },
   toAddress: {
     type: String,
     required: true
@@ -111,6 +114,12 @@ const quotationSchema = new mongoose.Schema({
         type: Number,
         required: true
       },
+      insurance: {
+        type: Number,
+      },
+      vppAmount: {
+        type: Number,
+      },
       price: {
         type: Number,
         required: true
@@ -122,7 +131,15 @@ const quotationSchema = new mongoose.Schema({
       topay: {
         type: String,
         required: true,
-        enum: ["Paid", "toPay"], // Fixed enum value
+        enum: ["paid", "toPay", "none"],
+      },
+      receiptNo: {
+        type: String,
+        default: ""
+      },
+      refNo: {
+        type: String,
+        default: ""
       }
     },
   ],

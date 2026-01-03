@@ -11,6 +11,10 @@ import Ites from "../page/public/Ites";
 import Services from "../page/public/Services";
 import Login from "../components/Login";
 
+// New Components
+import TermsAndConditions from "../page/TermsAndConditions";
+import PrivacyPolicy from "../page/PrivacyPolicy";
+
 // Services detail components
 import AirCourier from "../page/public/AirService";
 import TrainCourier from "../page/public/TrainService";
@@ -30,6 +34,10 @@ const routers = createBrowserRouter([
       { path: "login", element: <Login /> },
       { path: "services", element: <Services /> },
 
+      // New Routes
+      { path: "terms-and-conditions", element: <TermsAndConditions /> },
+      { path: "privacy-policy", element: <PrivacyPolicy /> },
+
       // Service Details with separate components
       { path: "services/air-courier", element: <AirCourier /> },
       { path: "services/train-courier", element: <TrainCourier /> },
@@ -38,7 +46,6 @@ const routers = createBrowserRouter([
   },
 ]);
 
-// Export Router Provider
 export default function MainRouter() {
   return <RouterProvider router={routers} />;
 }

@@ -17,6 +17,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
 import { fetchStations } from '../../../../features/stations/stationSlice'
 import { createBooking } from '../../../../features/booking/bookingSlice';
+import { addOption } from "../../../../features/addOptionsSlice/addOptionsSlice";
 import { useNavigate } from "react-router-dom";
 import CustomerSearch from "../../../../Components/CustomerSearch";
 import { ArrowBack } from '@mui/icons-material';
@@ -72,6 +73,7 @@ const generateInitialValues = () => {
       {
         receiptNo: receiptNo,
         refNo: refNo,
+        quantity: "",
         insurance: "",
         vppAmount: "",
         toPay: "",
@@ -143,6 +145,9 @@ const calculateTotals = (values) => {
 const BookingForm = () => {
   const [senderCities, setSenderCities] = React.useState([]);
   const [receiverCities, setReceiverCities] = React.useState([]);
+  const [addingCity, setAddingCity] = React.useState(false);
+  const [newReceiverCity, setNewReceiverCity] = React.useState("");
+  const [newSenderCity, setNewSenderCity] = React.useState("");
   const [generatedReceiptNos, setGeneratedReceiptNos] = React.useState(new Set());
   const [generatedRefNos, setGeneratedRefNos] = React.useState(new Set());
 
@@ -154,6 +159,80 @@ const BookingForm = () => {
   const navigate = useNavigate();
   const { createStatus, createError } = useSelector((state) => state.bookings);
 
+  const handleAddCity = async ({ forType, stateName, cityName, resetFn, setFieldValue }) => {
+    // basic validation
+    if (!stateName) {
+      alert("Please select a state first.");
+      return;
+    }
+    const trimmed = cityName?.trim();
+    if (!trimmed) {
+      alert("Please enter a city name.");
+      return;
+    }
+
+    try {
+      setAddingCity(true);
+
+      // DEBUG: show what we will send
+      console.log("handleAddCity: stateName =", JSON.stringify(stateName), "cityName =", trimmed);
+
+      const payload = { field: "city", fieldName: "city", name: trimmed, value: trimmed, state: stateName };
+      console.log("handleAddCity payload:", payload);
+
+      // call addOption
+      const addRes = await dispatch(addOption(payload)).unwrap();
+      console.log("addOption response:", addRes);
+
+      // try to extract created city name from response robustly
+      // your server's response earlier showed addRes.data.value === "Ghaziabad"
+      const createdName =
+        addRes?.data?.value ??
+        addRes?.value ??
+        addRes?.data ??
+        (typeof addRes === "string" ? addRes : null) ??
+        trimmed;
+
+      console.log("Created city resolved as:", createdName);
+
+      // Re-fetch cities from server for the given state (to keep canonical list)
+      const fetchRes = await dispatch(fetchCities(stateName)).unwrap();
+      console.log("fetchCities result:", fetchRes);
+
+      // normalize fetch result to an array
+      const fetchedCities = Array.isArray(fetchRes) ? fetchRes : (fetchRes?.data || []);
+      console.log("Normalized fetchedCities:", fetchedCities);
+
+      // update the correct local array and ensure createdName is present (case-insensitive dedupe)
+      const addIfMissing = (arr, name) => {
+        const found = arr.find(c => String(c).toLowerCase() === String(name).toLowerCase());
+        if (found) return arr; // already present
+        return [...arr, name];
+      };
+
+      if (forType === "sender") {
+        const updated = addIfMissing(fetchedCities, createdName);
+        setSenderCities(updated);
+        setFieldValue("fromCity", createdName);
+      } else {
+        const updated = addIfMissing(fetchedCities, createdName);
+        setReceiverCities(updated);
+        setFieldValue("toCity", createdName);
+      }
+
+      resetFn && resetFn("");
+      // small success message
+      console.log("City added & selected:", createdName);
+    } catch (err) {
+      console.error("Failed to add city:", err);
+      const message = err?.message || err?.data?.message || JSON.stringify(err) || "Failed to add city";
+      alert(message);
+    } finally {
+      setAddingCity(false);
+    }
+  };
+
+
   useEffect(() => {
     dispatch(fetchStates());
     dispatch(fetchStations());
@@ -163,6 +242,13 @@ const BookingForm = () => {
       navigate('/booking');
     }
   }, [createStatus, navigate]);
+
+  const getDateBeforeDays = (days) => {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date;
+  };
+
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -238,7 +324,8 @@ const BookingForm = () => {
                       label="Booking Date"
                       value={values.bookingDate}
                       onChange={(val) => setFieldValue("bookingDate", val)}
-                      minDate={new Date()}
+                      minDate={getDateBeforeDays(7)}
+                      format="dd/MM/yyyy"
                       renderInput={(params) => (
                         <TextField fullWidth {...params} name="bookingDate" />
                       )}
@@ -259,7 +346,8 @@ const BookingForm = () => {
                       label="Proposed Delivery Date"
                       value={values.deliveryDate}
                       onChange={(val) => setFieldValue("deliveryDate", val)}
-                      minDate={values.bookingDate || new Date()}
+                      minDate={values.bookingDate || getDateBeforeDays(7)}
+                      format="dd/MM/yyyy"
                       renderInput={(params) => (
                         <TextField fullWidth {...params} name="deliveryDate" />
                       )}
@@ -366,7 +454,33 @@ const BookingForm = () => {
                       </MenuItem>
                     ))}
                   </TextField>
+
+                  {/* Add new city for sender */}
+                  <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Add new city for selected state"
+                      value={newSenderCity}
+                      onChange={(e) => setNewSenderCity(e.target.value)}
+                      disabled={addingCity}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={() => handleAddCity({
+                        forType: "sender",
+                        stateName: values.fromState,
+                        cityName: newSenderCity,
+                        resetFn: setNewSenderCity,
+                        setFieldValue
+                      })}
+                      disabled={addingCity}
+                    >
+                      Add
+                    </Button>
+                  </Box>
                 </Grid>
+
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
@@ -485,7 +599,33 @@ const BookingForm = () => {
                       </MenuItem>
                     ))}
                   </TextField>
+
+                  {/* Add new city for receiver */}
+                  <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Add new city for selected state"
+                      value={newReceiverCity}
+                      onChange={(e) => setNewReceiverCity(e.target.value)}
+                      disabled={addingCity}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={() => handleAddCity({
+                        forType: "receiver",
+                        stateName: values.toState,
+                        cityName: newReceiverCity,
+                        resetFn: setNewReceiverCity,
+                        setFieldValue
+                      })}
+                      disabled={addingCity}
+                    >
+                      Add
+                    </Button>
+                  </Box>
                 </Grid>
+
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     fullWidth
@@ -536,6 +676,7 @@ const BookingForm = () => {
                           {[
                             "receiptNo",
                             "refNo",
+                            "quantity",
                             "insurance",
                             "vppAmount",
                             "weight",
@@ -578,29 +719,18 @@ const BookingForm = () => {
                               Remove
                             </Button>
                           </Grid>
-                          <Grid size={{ xs: 6, sm: 3, md: 3 }} textAlign={{ xs: 'left', sm: 'left' }}>
-                            <Button
-                              variant="outlined"
-                              disableElevation
-                              sx={{
-                                backgroundColor: '#f0f4ff',
-                                color: '#333',
-                                px: 2.5,
-                                py: 1,
-                                borderRadius: 2,
-                                fontWeight: 500,
-                                textTransform: 'none',
-                                boxShadow: 'none',
-                                borderColor: '#bcd0f7',
-                                '&:hover': {
-                                  backgroundColor: '#dbe8ff',
-                                  borderColor: '#90b4f0',
-                                },
-                              }}
-                            >
-                              Total Parcels: <strong style={{ marginLeft: 4 }}>{values.items.length}</strong>
-                            </Button>
-                          </Grid>
+                          {/* <Grid size={{ xs: 6, sm: 3, md: 3 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              type="number"
+                              label="Total Parcels"
+                              name="totalParcels"
+                              value={values.totalParcels}
+                              onChange={handleChange}
+                              inputProps={{ min: 1 }}
+                            />
+                          </Grid> */}
                         </Grid>
                       ))}
 
@@ -612,6 +742,7 @@ const BookingForm = () => {
                             push({
                               receiptNo: generateUniqueId("RCPT-", generatedReceiptNos, setGeneratedReceiptNos),
                               refNo: "",
+                              quantity: "",
                               insurance: "",
                               vppAmount: "",
                               toPayPaid: "",
