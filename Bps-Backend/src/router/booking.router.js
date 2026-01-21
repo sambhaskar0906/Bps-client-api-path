@@ -29,6 +29,7 @@ import {
   listDeletedBookings,
   restoreBooking,
   getIncomingBookings,
+  previewBookingReceiptNo
 } from '../controller/booking.controller.js';
 
 import { parseFormData } from "../middleware/multerParser.middleware.js";
@@ -45,6 +46,7 @@ router.post('/send-booking-email', sendBookingEmail);
 router.post('/send-booking-email/:bookingId', sendBookingEmailById);
 router.patch('/reject/:bookingId', rejectThirdPartyBookingRequest);
 router.get('/summary', customerWiseData);
+router.get("/preview-receipt", verifyJwt, previewBookingReceiptNo);
 router.get('/pending-amount', getAllCustomersPendingAmounts);
 router.post('/invoice-list', getInvoicesByFilter);
 router.post('/payment/:customerId', receiveCustomerPayment)

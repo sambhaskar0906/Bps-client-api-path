@@ -129,17 +129,23 @@ export const sendBookingEmail = createAsyncThunk(
     }
   }
 )
+
 export const sendWhatsAppMsg = createAsyncThunk(
-  'bookingMail/whatsApp', async (bookingId, thunkApi) => {
+  "quotation/sendWhatsapp",
+  async (bookingId, thunkApi) => {
     try {
-      const res = await axios.post(`${WHATSAPP_API}/send-booking-Quotation/${bookingId}`);
+      const res = await axios.post(
+        `${QUOTATION_API}/send-whatsapp/${bookingId}`
+      );
       return res.data;
-    }
-    catch (err) {
-      return thunkApi.rejectWithValue(err?.response?.data?.message);
+    } catch (err) {
+      return thunkApi.rejectWithValue(
+        err.response?.data?.message || "Failed to send WhatsApp"
+      );
     }
   }
-)
+);
+
 export const getQuotationBookingSummaryByDate = createAsyncThunk(
   'booking/getBookingSummary', async ({ fromDate, toDate }, thunkApi) => {
     try {
@@ -165,21 +171,40 @@ export const fetchIncomingQuotations = createAsyncThunk(
     }
   }
 );
+
+export const fetchReceiptPreview = createAsyncThunk(
+  "quotation/fetchReceiptPreview",
+  async (_, thunkApi) => {
+    try {
+      const res = await axios.get(`${BASE_URL}/receipt/preview`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+      });
+
+      return res.data.receiptNo;
+    } catch (err) {
+      return thunkApi.rejectWithValue(
+        err.response?.data?.message || "Failed to fetch receipt preview"
+      );
+    }
+  }
+);
+
+
 const initialState = {
   list: [],
   list2: [],
   quotationsList: [],
+  receiptPreview: "",
   requestCount: 0,
   activeDeliveriesCount: 0,
   cancelledDeliveriesCount: 0,
   totalRevenue: 0,
-
-
   loading: false,
   viewedBooking: null,
   status: 'idle',
   error: null,
-
   form: {
     firstName: "",
     lastName: "",
@@ -367,6 +392,19 @@ const quotationSlice = createSlice({
         state.quotationsList = action.payload;
       })
       .addCase(fetchIncomingQuotations.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+      .addCase(fetchReceiptPreview.pending, (state) => {
+        state.loading = true;
+      })
+
+      .addCase(fetchReceiptPreview.fulfilled, (state, action) => {
+        state.loading = false;
+        state.receiptPreview = action.payload;
+      })
+
+      .addCase(fetchReceiptPreview.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       })

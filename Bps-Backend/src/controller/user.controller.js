@@ -46,50 +46,70 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 });
 
-
 export const loginUser = asyncHandler(async (req, res) => {
-  try {
-    const { emailId, password } = req.body;
+  const { emailId, password } = req.body;
 
-
-    if (!emailId || !password) {
-      throw new ApiError(400, "Email and password are required");
-    }
-
-    const user = await User.findOne({ emailId }).select("+password");
-    if (!user) {
-      throw new ApiError(401, "Invalid email or password");
-    }
-    if (user.isBlacklisted) {
-      throw new ApiError(403, "Your account has been blacklisted. Please contact support.");
-    }
-
-    if (user.isDeactivated) {
-      throw new ApiError(403, "Your account has been deactivated. Please contact support.");
-    }
-    // Check if password is correct
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
-    if (!isPasswordCorrect) {
-      throw new ApiError(401, "Invalid email or password");
-    }
-
-    // Generate a JWT token
-    const token = jwt.sign(
-      { adminId: user.adminId, userId: user._id }, // payload
-      process.env.ACCESS_TOKEN_SECRET, // secret key from env
-      { expiresIn: "10h" }
-    );
-
-    res.cookie("accessToken", token, { httpOnly: true, secure: process.env.NODE_ENV === "production", maxAge: 3600000 }); // 1 hour
-
-    // Respond with success and token
-    res.status(200).json(new ApiResponse(200, "Login successful", { token }));
-
-  } catch (error) {
-    console.log("Login error:", error.message);
-    throw new ApiError(400, "Login failed", error.message);
+  if (!emailId || !password) {
+    throw new ApiError(400, "Email and password are required");
   }
+
+  const user = await User.findOne({ emailId }).select("+password");
+  if (!user) {
+    throw new ApiError(401, "Invalid email or password");
+  }
+
+  if (user.isBlacklisted) {
+    throw new ApiError(403, "Your account has been blacklisted. Please contact support.");
+  }
+
+  if (user.isDeactivated) {
+    throw new ApiError(403, "Your account has been deactivated. Please contact support.");
+  }
+
+  const isPasswordCorrect = await bcrypt.compare(password, user.password);
+  if (!isPasswordCorrect) {
+    throw new ApiError(401, "Invalid email or password");
+  }
+
+  // 🔐 Generate JWT
+  const token = jwt.sign(
+    {
+      adminId: user.adminId,
+      userId: user._id,
+      role: user.role
+    },
+    process.env.ACCESS_TOKEN_SECRET,
+    { expiresIn: "10h" }
+  );
+
+  res.cookie("accessToken", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 10 * 60 * 60 * 1000
+  });
+
+  // ✅ SEND FULL PROFILE DATA
+  res.status(200).json(
+    new ApiResponse(200, "Login successful", {
+      token,
+      user: {
+        adminId: user.adminId,
+        role: user.role,
+        firstName: user.firstName,
+        middleName: user.middleName,
+        lastName: user.lastName,
+        fullName: `${user.firstName} ${user.middleName ?? ""} ${user.lastName}`.trim(),
+        emailId: user.emailId,
+        contactNumber: user.contactNumber,
+        adminProfilePhoto: user.adminProfilePhoto,
+        startStation: user.startStation,
+        stationCode: user.stationCode
+      }
+    })
+  );
 });
+
 // Logout User
 const tokenBlacklist = new Set();
 

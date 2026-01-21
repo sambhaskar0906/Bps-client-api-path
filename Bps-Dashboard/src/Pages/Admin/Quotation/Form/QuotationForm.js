@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Formik, Form, Field, FieldArray } from "formik";
 import {
   Box,
@@ -21,7 +21,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
-import { createBooking } from "../../../../features/quotation/quotationSlice";
+import { createBooking, fetchReceiptPreview } from "../../../../features/quotation/quotationSlice";
 import { fetchStations } from '../../../../features/stations/stationSlice'
 import { useNavigate } from "react-router-dom";
 import CheckCircle from '@mui/icons-material/CheckCircle';
@@ -60,6 +60,7 @@ const initialValues = {
       name: "",
       quantity: "",
       weight: "",
+      perKg: "",
       price: "",
       insurance: "",
       vppAmount: "",
@@ -70,16 +71,10 @@ const initialValues = {
   ],
 
   addComment: "",
-
-  // Bilty Amount field add किया
   biltyAmount: "20",
-
   billTotal: "",
-
-  manualInsurance: "",
-  manualVpp: "",
+  insVppAmount: "",
   sTax: "",
-
   grandTotal: "",
   roundOff: "",
   finalTotal: "",
@@ -90,6 +85,10 @@ const QuotationForm = () => {
   const [receiverCities, setReceiverCities] = React.useState([]);
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const formikRef = useRef(null);
+  const receiptPreview = useSelector(
+    (state) => state.quotations.receiptPreview
+  );
   const { states, cities } = useSelector((state) => state.location);
   const { list: stations } = useSelector((state) => state.stations);
   useEffect(() => {
@@ -101,6 +100,28 @@ const QuotationForm = () => {
     message: "",
     severity: "success",
   });
+
+  useEffect(() => {
+    dispatch(fetchReceiptPreview());
+    return () => {
+      dispatch({ type: "quotation/resetForm" });
+    };
+  }, [dispatch]);
+
+
+  useEffect(() => {
+    if (!receiptPreview || !formikRef.current) return;
+
+    const items = formikRef.current.values.productDetails || [];
+
+    const updated = items.map(item => ({
+      ...item,
+      receiptNo: receiptPreview,
+    }));
+
+    formikRef.current.setFieldValue("productDetails", updated);
+  }, [receiptPreview]);
+
 
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
@@ -136,23 +157,24 @@ const QuotationForm = () => {
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Formik
+        innerRef={formikRef}
         initialValues={initialValues}
         onSubmit={async (values, { resetForm, setSubmitting }) => {
           try {
             setSubmitting(true);
-
             // Format product details
-            const formattedProductDetails = values.productDetails.map(item => ({
-              name: item.name,
-              quantity: parseFloat(item.quantity) || 0,
-              weight: parseFloat(item.weight) || 0,
-              price: parseFloat(item.price) || 0,
-              insurance: parseFloat(item.insurance) || 0,
-              vppAmount: parseFloat(item.vppAmount) || 0,
-              topay: item.topay,
-              receiptNo: item.receiptNo || "",
-              refNo: item.refNo || "",
-            }));
+            const formattedProductDetails = values.productDetails.map(
+              ({ perKg, ...item }) => ({
+                name: item.name,
+                quantity: parseFloat(item.quantity) || 0,
+                weight: parseFloat(item.weight) || 0,
+                price: parseFloat(item.price) || 0,
+                insurance: parseFloat(item.insurance) || 0,
+                vppAmount: parseFloat(item.vppAmount) || 0,
+                topay: item.topay,
+                refNo: item.refNo || "",
+              })
+            );
 
             // Calculate ONLY product value (price × quantity) - NO insurance or VPP
             const totalProductValue = formattedProductDetails.reduce(
@@ -187,6 +209,8 @@ const QuotationForm = () => {
               contactNumber: values.contactNumber,
               email: values.email,
               toContactNumber: values.toContactNumber || values.contactNumber,
+              createdByUser: JSON.parse(localStorage.getItem("user"))?._id,
+              createdByRole: "admin",
             };
 
             await dispatch(createBooking(payload)).unwrap();
@@ -199,6 +223,7 @@ const QuotationForm = () => {
           }
         }}
       >
+
         {({ values, handleChange, setFieldValue, isSubmitting }) => {
           const handleUpdate = (index) => {
             const item = values.productDetails[index];
@@ -279,7 +304,7 @@ const QuotationForm = () => {
                         label="Booking Date"
                         value={values.quotationDate}
                         onChange={(val) => setFieldValue("quotationDate", val)}
-                        minDate={getDateBeforeDays(7)}
+                        minDate={getDateBeforeDays(10)}
                         format="dd/MM/yyyy"
                         slotProps={{
                           textField: {
@@ -300,7 +325,7 @@ const QuotationForm = () => {
                         onChange={(val) =>
                           setFieldValue("proposedDeliveryDate", val)
                         }
-                        minDate={values.quotationDate || getDateBeforeDays(7)}
+                        minDate={values.quotationDate || getDateBeforeDays(10)}
                         format="dd/MM/yyyy"
                         slotProps={{
                           textField: {
@@ -554,6 +579,9 @@ const QuotationForm = () => {
                                 label="Receipt No."
                                 fullWidth
                                 size="small"
+                                InputProps={{
+                                  readOnly: true,
+                                }}
                               />
                             </Grid>
 
@@ -569,7 +597,7 @@ const QuotationForm = () => {
                             </Grid>
 
                             {/* Product Name */}
-                            <Grid size={{ xs: 12, md: 3 }}>
+                            <Grid size={{ xs: 12, md: 2 }}>
                               <Field
                                 name={`productDetails[${index}].name`}
                                 as={TextField}
@@ -593,15 +621,45 @@ const QuotationForm = () => {
 
                             {/* Weight (kg) */}
                             <Grid size={{ xs: 12, md: 1.5 }}>
-                              <Field
-                                name={`productDetails[${index}].weight`}
-                                as={TextField}
+                              <TextField
                                 label="Weight (kg)"
                                 type="number"
                                 fullWidth
                                 size="small"
+                                value={values.productDetails[index].weight}
+                                onChange={(e) => {
+                                  const weight = Number(e.target.value || 0);
+                                  const perKg = Number(values.productDetails[index].perKg || 0);
+
+                                  setFieldValue(`productDetails[${index}].weight`, e.target.value);
+                                  setFieldValue(
+                                    `productDetails[${index}].price`,
+                                    (weight * perKg).toFixed(2)
+                                  );
+                                }}
                               />
                             </Grid>
+                            <Grid size={{ xs: 12, md: 1.5 }}>
+                              <TextField
+                                label="Per Kg"
+                                type="number"
+                                fullWidth
+                                size="small"
+                                value={values.productDetails[index].perKg}
+                                onChange={(e) => {
+                                  const perKg = Number(e.target.value || 0);
+                                  const weight = Number(values.productDetails[index].weight || 0);
+
+                                  setFieldValue(`productDetails[${index}].perKg`, e.target.value);
+                                  setFieldValue(
+                                    `productDetails[${index}].price`,
+                                    (weight * perKg).toFixed(2)
+                                  );
+                                }}
+                              />
+                            </Grid>
+
+
 
                             {/* Insurance */}
                             <Grid size={{ xs: 12, md: 1.5 }}>
@@ -635,14 +693,13 @@ const QuotationForm = () => {
 
                             {/* Price */}
                             <Grid size={{ xs: 12, md: 1.5 }}>
-                              <Field
-                                name={`productDetails[${index}].price`}
-                                as={TextField}
+                              <TextField
                                 label="Price"
-                                type="number"
                                 fullWidth
                                 size="small"
+                                value={values.productDetails[index].price}
                                 InputProps={{
+                                  readOnly: true,
                                   startAdornment: <InputAdornment position="start">₹</InputAdornment>,
                                 }}
                               />
@@ -689,6 +746,7 @@ const QuotationForm = () => {
                                       name: "",
                                       quantity: "",
                                       weight: "",
+                                      perKg: "",
                                       insurance: "",
                                       vppAmount: "",
                                       price: "",
@@ -754,24 +812,11 @@ const QuotationForm = () => {
                   <Grid container spacing={2}>
                     {/* Product Value (Only price × quantity) */}
 
-                    <Grid size={{ xs: 12, md: 2 }}>
+                    <Grid size={{ xs: 12, md: 3 }}>
                       <TextField
-                        name="manualInsurance"
-                        label="Insurance"
-                        value={values.manualInsurance || ""}
-                        onChange={handleChange}
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">₹</InputAdornment>,
-                        }}
-                        fullWidth
-                      />
-                    </Grid>
-
-                    <Grid size={{ xs: 12, md: 2 }}>
-                      <TextField
-                        name="manualVpp"
-                        label="VPP Amount"
-                        value={values.manualVpp || ""}
+                        name="insVppAmount"
+                        label="INS / VPP Amount"
+                        value={values.insVppAmount || ""}
                         onChange={handleChange}
                         InputProps={{
                           startAdornment: <InputAdornment position="start">₹</InputAdornment>,
@@ -975,42 +1020,41 @@ const EffectSyncTotal = ({ values, setFieldValue }) => {
   useEffect(() => {
     const biltyAmount = 20;
 
-    // ✅ 1. Product price ka total (sirf price)
-    const productTotal = values.productDetails.reduce(
+    // ✅ 1. Base price (sirf product price)
+    const basePrice = values.productDetails.reduce(
       (sum, item) => sum + (parseFloat(item.price) || 0),
       0
     );
 
-    // ✅ 2. Bottom se insurance / vpp (optional)
-    const manualInsurance = parseFloat(values.manualInsurance) || 0;
-    const manualVpp = parseFloat(values.manualVpp) || 0;
+    // ✅ 2. INS / VPP (bottom wala ONLY)
+    const insVppAmount = parseFloat(values.insVppAmount) || 0;
 
-    // ✅ 3. Bill Total
-    const billTotal =
-      productTotal + manualInsurance + manualVpp + biltyAmount;
-
-    // ✅ 4. Tax sirf product value par
+    // ✅ 3. GST sirf base price par
     const taxPercent = parseFloat(values.sTax) || 0;
-    const taxAmount = (productTotal * taxPercent) / 100;
+    const gstAmount = (basePrice * taxPercent) / 100;
 
-    // ✅ 5. Final total
-    const finalTotal = billTotal + taxAmount;
+    // ✅ 4. Final Total
+    const finalTotal =
+      basePrice +
+      gstAmount +
+      biltyAmount +
+      insVppAmount;
 
+    // ✅ 5. Set values
+    setFieldValue("amount", basePrice.toFixed(2));
     setFieldValue("biltyAmount", biltyAmount.toFixed(2));
-    setFieldValue("billTotal", billTotal.toFixed(2));
-    setFieldValue("grandTotal", finalTotal.toFixed(2));
+    setFieldValue("billTotal", basePrice.toFixed(2));
     setFieldValue("roundOff", "0.00");
+    setFieldValue("grandTotal", finalTotal.toFixed(2));
     setFieldValue("finalTotal", finalTotal.toFixed(2));
-    setFieldValue("amount", productTotal.toFixed(2)); // optional
+
   }, [
     values.productDetails,
-    values.manualInsurance,
-    values.manualVpp,
+    values.insVppAmount,
     values.sTax,
     setFieldValue,
   ]);
 };
-
 
 
 export default QuotationForm;

@@ -8,6 +8,9 @@ import { sendWhatsAppMessage } from '../services/whatsappServices.js'
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { generateInvoiceNumber } from "../utils/invoiceNumber.js";
 import { generateInvoicePDF } from "../utils/invoiceGenerator.js";
+import { previewNextBookingReceiptNo } from "../utils/generateReceiptNo.js";
+import { generateAndCommitBookingReceiptNo }
+  from "../utils/generateReceiptNo.js";
 import moment from "moment-timezone";
 
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -93,65 +96,33 @@ const getBookingFilterByType = (type, user) => {
 
 
 export const viewBooking = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const booking = await Booking.findOne({
-      $or: [{ bookingId: id }]
-    })
-      .populate('startStation', 'stationName gst address contact')
-      .populate('endStation', 'stationName')
-      .lean();
+  const { id } = req.params;
 
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+  const booking = await Booking.findOne({ bookingId: id })
+    .populate('startStation endStation')
+    .lean();
 
-    // Extract only the necessary fields
-    const simplifiedResponse = {
-      bookingId: booking.bookingId,
-      firstName: booking.firstName,
-      lastName: booking.lastName,
-      mobile: booking.mobile,
-      email: booking.email,
-      bookingDate: booking.bookingDate
-        ? moment(booking.bookingDate).tz("Asia/Kolkata").format("DD/MM/YYYY")
-        : null,
-      deliveryDate: booking.deliveryDate
-        ? new Date(booking.deliveryDate).toLocaleDateString('en-CA')
-        : null,
-      senderName: booking.senderName,
-      senderGgt: booking.senderGgt,
-      fromState: booking.fromState,
-      fromCity: booking.fromCity,
-      senderPincode: booking.senderPincode,
-      receiverName: booking.receiverName,
-      receiverGgt: booking.receiverGgt,
-      toState: booking.toState,
-      toCity: booking.toCity,
-      toPincode: booking.toPincode,
-      items: booking.items,
-      freight: booking.freight,
-      ins_vpp: booking.ins_vpp,
-      cgst: booking.cgst,
-      sgst: booking.sgst,
-      igst: booking.igst,
-      billTotal: booking.billTotal,
-      grandTotal: booking.grandTotal,
-      startStation: {
-        stationName: booking.startStation?.stationName,
-        gst: booking.startStation?.gst,
-        address: booking.startStation?.address,
-        contact: booking.startStation?.contact
-      },
-      endStation: {
-        stationName: booking.endStation?.stationName
-      }
-    };
-
-    res.json(simplifiedResponse);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+  if (!booking) {
+    return res.status(404).json({ message: "Booking not found" });
   }
+
+  // ✅ Date formatting with timezone
+  const formattedBooking = {
+    ...booking,
+    bookingDate: booking.bookingDate
+      ? moment(booking.bookingDate).tz("Asia/Kolkata").format("DD-MM-YYYY")
+      : null,
+    deliveryDate: booking.deliveryDate
+      ? moment(booking.deliveryDate).tz("Asia/Kolkata").format("DD-MM-YYYY")
+      : null,
+    createdAt: booking.createdAt
+      ? moment(booking.createdAt).tz("Asia/Kolkata").format("DD-MM-YYYY HH:mm")
+      : null,
+  };
+
+  res.status(200).json(formattedBooking);
 };
+
 
 export const createBooking = async (req, res) => {
 
@@ -170,6 +141,8 @@ export const createBooking = async (req, res) => {
       fromCity,
       senderPincode,
       receiverName,
+      receiverContact,
+      receiverEmail,
       receiverGgt,
       receiverLocality,
       toState,
@@ -225,6 +198,8 @@ export const createBooking = async (req, res) => {
       fromCity,
       senderPincode,
       receiverName,
+      receiverContact,
+      receiverEmail,
       receiverGgt,
       receiverLocality,
       toState,
@@ -487,11 +462,11 @@ export const sendBookingEmailById = async (req, res) => {
 };
 
 export const updateBooking = async (req, res) => {
-
   try {
     const { id } = req.params;
     const updates = { ...req.body };
 
+    // Resolve stations safely
     if (updates.startStation) {
       updates.startStation = await resolveStation(updates.startStation);
     }
@@ -499,19 +474,39 @@ export const updateBooking = async (req, res) => {
       updates.endStation = await resolveStation(updates.endStation);
     }
 
+    // 🔒 Protect receipt numbers (do not overwrite)
+    if (updates.items) {
+      delete updates.items; // items sirf create ke time change
+    }
+
     const booking = await Booking.findOneAndUpdate(
       { bookingId: id },
       updates,
       { new: true }
-    ).populate('startStation endStation', 'stationName');
+    )
+      .populate('startStation endStation')
+      .lean();
 
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    res.json(booking);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    // ✅ Format dates in response
+    booking.bookingDate = booking.bookingDate
+      ? moment(booking.bookingDate).tz("Asia/Kolkata").format("DD-MM-YYYY")
+      : null;
+
+    booking.deliveryDate = booking.deliveryDate
+      ? moment(booking.deliveryDate).tz("Asia/Kolkata").format("DD-MM-YYYY")
+      : null;
+
+    res.status(200).json(booking); // 🔥 FULL UPDATED DATA
   } catch (err) {
     console.error(err);
     res.status(400).json({ message: err.message });
   }
 };
+
 // backend controller
 export const deleteBooking = async (req, res) => {
   try {
@@ -637,7 +632,7 @@ export const getBookingStatusList = async (req, res) => {
     console.log('Booking filter:', JSON.stringify(filter, null, 2)); // Debug log
 
     const bookings = await Booking.find(filter)
-      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted') // Added isDeleted to select
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted items') // Added isDeleted to select
       .populate('startStation endStation', 'stationName')
       .populate('createdByRole', 'role')
       .lean();
@@ -664,6 +659,7 @@ export const getBookingStatusList = async (req, res) => {
 
     const data = validBookings.map((b, i) => ({
       SNo: i + 1,
+      biltyNo: b.items?.[0]?.receiptNo || "-",
       orderId: b.orderId || 'N/A',
       orderBy:
         b.requestedByRole === 'public'
@@ -827,7 +823,8 @@ export const getBookingRevenueList = async (req, res) => {
           : "N/A",
         pickup: b.startStation?.stationName || 'Unknown',
         drop: b.endStation?.stationName || 'Unknown',
-        revenue: b.grandTotal?.toFixed(2) || '0.00',
+        revenue: (b.pickupCollectedAmount || 0).toFixed(2)
+          || '0.00',
         action: {
           view: `/bookings/${b.bookingId}`,
           edit: `/bookings/edit/${b.bookingId}`,
@@ -891,7 +888,10 @@ export const getTotalRevenue = async (req, res) => {
     const filter = getBookingFilterByType('request', user); // request = non-active, non-cancelled
     const bookings = await Booking.find(filter).select('grandTotal').lean();
 
-    const totalRevenue = bookings.reduce((sum, b) => sum + (b.grandTotal || 0), 0);
+    const totalRevenue = bookings.reduce(
+      (sum, b) => sum + (b.pickupCollectedAmount || 0),
+      0
+    );
     res.json({ totalRevenue: totalRevenue.toFixed(2) });
   } catch (error) {
     console.error(error);
@@ -1068,7 +1068,10 @@ export const getBookingSummaryByDate = async (req, res) => {
       query.createdByUser = user._id;
     }
 
-    const bookings = await Booking.find(query).sort({ bookingDate: -1 });
+    const bookings = await Booking.find(query)
+      .populate("startStation", "stationName")
+      .populate("endStation", "stationName")
+      .sort({ bookingDate: -1 });
 
     // Debug: Check what dates we found
     console.log(`Found ${bookings.length} bookings:`);
@@ -1079,60 +1082,25 @@ export const getBookingSummaryByDate = async (req, res) => {
     const transformedBookings = bookings.map((booking) => {
       const grandTotal = booking.grandTotal || 0;
 
-      // Calculate payment based on items' toPay status
-      let paidAmount = 0;
-      let totalPayableAmount = 0;
-      let paidItemsAmount = 0;
-
-      if (booking.items && Array.isArray(booking.items)) {
-        booking.items.forEach(item => {
-          const itemAmount = Number(item.amount) || 0;
-          totalPayableAmount += itemAmount;
-
-          if (item.toPay === "paid") {
-            paidItemsAmount += itemAmount;
-          }
-        });
-      }
-
-      // Calculate paid amount based on items payment status
-      if (paidItemsAmount > 0) {
-        if (paidItemsAmount >= totalPayableAmount) {
-          // All items are fully paid
-          paidAmount = grandTotal;
-        } else {
-          // Some items are paid - calculate proportional amount
-          const paidRatio = totalPayableAmount > 0 ? paidItemsAmount / totalPayableAmount : 0;
-          paidAmount = Math.round(grandTotal * paidRatio);
-        }
-      } else {
-        // No items are marked as paid, use booking-level paidAmount
-        paidAmount = booking.paidAmount || 0;
-      }
-
-      const toPayAmount = Math.max(grandTotal - paidAmount, 0);
-
-      // Determine payment status
-      let paymentStatus = "Unpaid";
-      if (paidAmount >= grandTotal && grandTotal > 0) {
-        paymentStatus = "Paid";
-      } else if (paidAmount > 0 && paidAmount < grandTotal) {
-        paymentStatus = "Partial";
-      }
+      const paidAmount = booking.pickupCollectedAmount || 0;
+      const toPayAmount = booking.deliveryPendingAmount || 0;
+      const paymentStatus = booking.paymentStatus || "Unpaid";
 
       return {
         ...booking.toObject(),
+        startStationName: booking.startStation?.stationName || "",
+        endStationName: booking.endStation?.stationName || "",
         grandTotal,
         paid: paidAmount,
         toPay: toPayAmount,
         itemsCount: booking.items?.length || 0,
-        paymentStatus: paymentStatus
+        paymentStatus
       };
     });
 
     // Calculate summary totals
-    const totalPaid = transformedBookings.reduce((sum, b) => sum + b.paid, 0);
-    const totalToPay = transformedBookings.reduce((sum, b) => sum + b.toPay, 0);
+    const totalPaid = transformedBookings.reduce((s, b) => s + b.paid, 0);
+    const totalToPay = transformedBookings.reduce((s, b) => s + b.toPay, 0);
     const paidBookings = transformedBookings.filter(b => b.paymentStatus === "Paid").length;
     const unpaidBookings = transformedBookings.filter(b => b.paymentStatus === "Unpaid").length;
     const partialBookings = transformedBookings.filter(b => b.paymentStatus === "Partial").length;
@@ -1598,8 +1566,6 @@ export const generateInvoiceByCustomer = async (req, res) => {
   }
 };
 
-
-
 export const getAllCustomersPendingAmounts = async (req, res) => {
   try {
     // Get all bookings with customer data
@@ -1635,39 +1601,9 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
       const customerData = customerMap.get(customerId);
       const grandTotal = booking.grandTotal || 0;
 
-      // Calculate paid amount based on items' toPay status
-      let paidAmount = 0;
-      let paymentStatus = "Unpaid";
-
-      if (booking.items && Array.isArray(booking.items)) {
-        const totalItemsAmount = booking.items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-        const paidItemsAmount = booking.items.reduce((sum, item) =>
-          item.toPay === 'paid' ? sum + (Number(item.amount) || 0) : sum, 0);
-
-        if (paidItemsAmount > 0) {
-          if (paidItemsAmount >= totalItemsAmount && totalItemsAmount > 0) {
-            // All items are paid
-            paidAmount = grandTotal;
-            paymentStatus = "Paid";
-          } else {
-            // Some items are paid - calculate proportional amount
-            const paidRatio = totalItemsAmount > 0 ? paidItemsAmount / totalItemsAmount : 0;
-            paidAmount = Math.round(grandTotal * paidRatio);
-            paymentStatus = "Partial";
-          }
-        } else {
-          // No items are paid, use booking-level payment
-          paidAmount = booking.paidAmount || 0;
-          paymentStatus = paidAmount > 0 ? "Partial" : "Unpaid";
-        }
-      } else {
-        // No items array, use booking-level payment
-        paidAmount = booking.paidAmount || 0;
-        paymentStatus = paidAmount >= grandTotal ? "Paid" :
-          paidAmount > 0 ? "Partial" : "Unpaid";
-      }
-
-      const pendingForBooking = Math.max(grandTotal - paidAmount, 0);
+      const paidAmount = booking.pickupCollectedAmount || 0;
+      const pendingForBooking = booking.deliveryPendingAmount || 0;
+      const paymentStatus = booking.paymentStatus || "Unpaid";
 
       // Update customer totals
       customerData.totalBookings++;
@@ -1693,7 +1629,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
         pendingAmount: pendingForBooking,
         paymentStatus,
         items: booking.items?.map(item => ({
-          receiptNo: item.receiptNo,
+          receiptNo: item.receiptNo || booking.bookingId,
           refNo: item.refNo,
           quantity: item.quantity,
           weight: item.weight,
@@ -1755,7 +1691,6 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
   }
 };
 
-
 export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   const { customerId } = req.params;
   let { amount } = req.body;
@@ -1767,7 +1702,9 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   // Find all bookings with pending amount (delivered OR not)
   const bookings = await Booking.find({
     customerId,
-    $expr: { $lt: [{ $ifNull: ["$paidAmount", 0] }, "$grandTotal"] }
+    $expr: {
+      $gt: [{ $ifNull: ["$deliveryPendingAmount", 0] }, 0]
+    }
   }).sort({ bookingDate: 1 });
 
   if (!bookings.length) {
@@ -1777,16 +1714,18 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
   let remainingPayment = amount;
 
   for (let booking of bookings) {
-    const pendingForBooking = booking.grandTotal - (booking.paidAmount || 0);
-
-    if (remainingPayment <= 0) break;
+    const pendingForBooking = booking.deliveryPendingAmount || 0;
 
     if (remainingPayment >= pendingForBooking) {
-      booking.paidAmount = booking.grandTotal;
+      booking.deliveryPendingAmount = 0;
+      booking.pickupCollectedAmount += pendingForBooking;
+      booking.paidAmount += pendingForBooking;
       booking.paymentStatus = "Paid";
       remainingPayment -= pendingForBooking;
     } else {
-      booking.paidAmount = (booking.paidAmount || 0) + remainingPayment;
+      booking.deliveryPendingAmount -= remainingPayment;
+      booking.pickupCollectedAmount += remainingPayment;
+      booking.paidAmount += remainingPayment;
       booking.paymentStatus = "Partial";
       remainingPayment = 0;
     }
@@ -1848,6 +1787,9 @@ export const getInvoicesByFilter = async (req, res) => {
     if (startStation) {
       // try to resolve station by name (case-insensitive)
       stationDoc = await Station.findOne({ stationName: new RegExp(`^${startStation}$`, "i") });
+      const bookingReceiptNo = await generateAndCommitBookingReceiptNo(
+        stationDoc.stationCode || stationDoc.stationName
+      );
       if (stationDoc) {
         matchStage.startStation = stationDoc._id;
       } else {
@@ -1878,37 +1820,14 @@ export const getInvoicesByFilter = async (req, res) => {
       {
         $addFields: {
           grandTotal: { $ifNull: ["$grandTotal", 0] },
-          paidAmount: {
-            $ifNull: [
-              { $cond: [{ $gt: ["$totalPaidAmount", 0] }, "$totalPaidAmount", "$paidAmount"] },
-              {
-                $reduce: {
-                  input: { $ifNull: ["$payments", []] },
-                  initialValue: 0,
-                  in: { $add: ["$$value", { $ifNull: ["$$this.amount", 0] }] }
-                }
-              }
-            ]
-          }
+          paidAmount: { $ifNull: ["$pickupCollectedAmount", 0] },
         }
       },
       {
         $addFields: {
-          toPayAmount: {
-            $cond: [
-              { $gt: [{ $subtract: ["$grandTotal", "$paidAmount"] }, 0] },
-              { $subtract: ["$grandTotal", "$paidAmount"] },
-              0
-            ]
-          },
-          debit: {
-            $cond: [
-              { $gt: [{ $subtract: ["$grandTotal", "$paidAmount"] }, 0] },
-              { $subtract: ["$grandTotal", "$paidAmount"] },
-              0
-            ]
-          },
-          credit: "$paidAmount",
+          toPayAmount: { $ifNull: ["$deliveryPendingAmount", 0] },
+          debit: { $ifNull: ["$deliveryPendingAmount", 0] },
+          credit: { $ifNull: ["$pickupCollectedAmount", 0] },
           vchType: "GST Service Invoice",
         }
       },
@@ -2006,3 +1925,20 @@ export const getIncomingBookings = async (req, res) => {
   }
 };
 
+export const previewBookingReceiptNo = async (req, res) => {
+  const { stationCode } = req.user;
+
+  if (!stationCode) {
+    return res.status(400).json({
+      message: "StationCode not found in logged-in user"
+    });
+  }
+
+  const receiptNo =
+    await previewNextBookingReceiptNo(stationCode);
+
+  res.status(200).json({
+    success: true,
+    receiptNo, // BPS-DEL-001 (preview only)
+  });
+};

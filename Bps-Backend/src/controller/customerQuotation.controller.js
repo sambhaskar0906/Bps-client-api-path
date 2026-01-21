@@ -3,10 +3,14 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import nodemailer from 'nodemailer';
 import Quotation from "../model/customerQuotation.model.js";
+import { previewNextReceiptNo } from "../utils/generateReceiptNo.js";
+import { sendWhatsappMessage } from "../utils/sendWhatsapp.js";
 import { Customer } from "../model/customer.model.js";
 import manageStation from "../model/manageStation.model.js";
 import { QCustomer } from "../model/Qcustomer.model.js";
 import { parse } from 'date-fns';
+import { uploadPdfToCloudinary } from "../utils/uploadPdfToCloudinary.js";
+import { generateAndCommitReceiptNo } from "../utils/generateReceiptNo.js";
 
 const normalizeDate = (inputDate) => {
   if (!inputDate) return null;
@@ -24,6 +28,7 @@ const formatQuotations = (quotations) => {
   return quotations.map((q, index) => ({
     "orderId": q.orderId || 'N/A',
     "S.No.": index + 1,
+    biltyNo: q.productDetails?.[0]?.receiptNo || "-",
     "Booking ID": q.bookingId,
     "orderBy": q.createdByRole === "admin"
       ? "Admin"
@@ -75,6 +80,27 @@ const getBookingFilterByType = (type, user) => {
 
   return baseFilter;
 };
+
+const parseDDMMYYYY = (dateStr, endOfDay = false) => {
+  const [dd, mm, yyyy] = dateStr.split("-");
+
+  if (!dd || !mm || !yyyy) return null;
+
+  const date = new Date(
+    Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0
+    )
+  );
+
+  return isNaN(date.getTime()) ? null : date;
+};
+
 // Create Quotation Controller
 export const createQuotation = asyncHandler(async (req, res, next) => {
   const user = req.user;
@@ -105,6 +131,7 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     locality,
     grandTotal,
     freight,
+    insVppAmount,
     contactNumber,
     email
   } = req.body;
@@ -187,25 +214,9 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
 
   // Calculate grandTotal if not provided
   let calculatedGrandTotal = grandTotal;
-  if (!calculatedGrandTotal) {
-    // Calculate product total including insurance
-    const productTotal = productDetails.reduce((acc, item) => {
-      const itemTotal = (item.price * item.quantity);
-      const itemInsurance = item.insurance || 0;
-      const itemVpp = item.vppAmount || 0;
-      return acc + itemTotal + itemInsurance;
-    }, 0);
-
-    // Calculate tax only on product value (excluding insurance)
-    const productValueTotal = productDetails.reduce((acc, item) =>
-      acc + (item.price * item.quantity), 0
-    );
-
-    const taxAmount = (productValueTotal * (Number(sTax) || 0)) / 100;
-    const sgstAmount = (productValueTotal * (Number(sgst) || 0)) / 100;
-
-    calculatedGrandTotal = productTotal + taxAmount + sgstAmount + (Number(freight) || 0) + (Number(amount) || 0);
-  }
+  const receiptNo = await generateAndCommitReceiptNo(
+    station.stationCode || station.stationName
+  );
 
   // 4. Create and Save Quotation
   const quotation = new Quotation({
@@ -237,13 +248,14 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     sgst: Number(sgst) || 0,
     amount: Number(amount) || 0,
     freight: Number(freight) || 0,
+    insVppAmount: Number(insVppAmount) || 0,
     createdByUser: user._id,
     createdByRole: user.role,
     productDetails: productDetails.map(item => ({
       ...item,
       insurance: item.insurance || 0,
       vppAmount: item.vppAmount || 0,
-      receiptNo: item.receiptNo || "",
+      receiptNo,
       refNo: item.refNo || ""
     })),
     grandTotal: calculatedGrandTotal,
@@ -256,7 +268,8 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
     quotationDate: formatDateOnly(quotation.quotationDate),
     proposedDeliveryDate: formatDateOnly(quotation.proposedDeliveryDate),
     totalInsurance: quotation.totalInsurance, // Include total insurance in response
-    computedTotalRevenue: quotation.computedTotalRevenue // Include computed total
+    computedTotalRevenue: quotation.computedTotalRevenue, // Include computed total
+    insVppAmount: quotation.insVppAmount
   };
 
   res.status(201).json(new ApiResponse(201, formattedQuotation, "Quotation created successfully"));
@@ -271,12 +284,14 @@ export const getBookingSummaryByDate = async (req, res) => {
       return res.status(400).json({ message: "Both fromDate and toDate are required" });
     }
 
-    // ✅ Parse dd-MM-yyyy format correctly
-    const from = new Date(`${fromDate}T00:00:00.000Z`);
-    const to = new Date(`${toDate}T23:59:59.999Z`);
-    to.setHours(23, 59, 59, 999);
+    // ✅ DD-MM-YYYY parsing
+    const from = parseDDMMYYYY(fromDate);
+    const to = parseDDMMYYYY(toDate, true);
 
-    // 🧠 Build query
+    if (!from || !to) {
+      return res.status(400).json({ message: "Invalid date format. Use DD-MM-YYYY" });
+    }
+
     const query = {
       quotationDate: { $gte: from, $lte: to }
     };
@@ -285,11 +300,17 @@ export const getBookingSummaryByDate = async (req, res) => {
       query.createdByUser = user._id;
     }
 
-    const bookings = await Quotation.find(query).sort({ bookingDate: -1 });
+    // ❌ lean() hata diya
+    const bookings = await Quotation.find(query)
+      .sort({ quotationDate: -1 });
 
     const bookingSummaries = bookings.map((booking) => ({
       ...booking.toObject(),
-      itemsCount: booking.items?.length || 0,
+      paid: booking.paidAmount || 0,
+      toPay: booking.deliveryPendingAmount || 0,
+      paymentStatus: booking.paymentStatus,
+
+      itemsCount: booking.productDetails?.length || 0,
     }));
 
     res.status(200).json({
@@ -297,6 +318,7 @@ export const getBookingSummaryByDate = async (req, res) => {
       total: bookingSummaries.length,
       bookings: bookingSummaries,
     });
+
   } catch (error) {
     console.error("Error fetching bookings by date:", error);
     res.status(500).json({ message: "Server Error" });
@@ -327,8 +349,7 @@ export const getQuotationById = asyncHandler(async (req, res, next) => {
   const quotationWithVirtuals = {
     ...quotation.toObject(),
     toContactNumber: quotation.toContactNumber || quotation.mobile,
-    totalInsurance: quotation.totalInsurance,
-    totalVppAmount: quotation.totalVppAmount,
+    insVppAmount: quotation.insVppAmount,
     productTotal: quotation.productTotal,
     computedTotalRevenue: quotation.computedTotalRevenue
   };
@@ -356,25 +377,22 @@ export const updateQuotation = asyncHandler(async (req, res, next) => {
     // Get existing quotation to calculate with current tax rates
     const existingQuotation = await Quotation.findOne({ bookingId });
     if (existingQuotation) {
-      // Calculate product total including insurance
-      const productTotal = updatedData.productDetails.reduce((acc, item) => {
-        const itemTotal = (item.price * item.quantity);
-        const itemInsurance = item.insurance || 0;
-        const itemVpp = item.vppAmount || 0;
-        return acc + itemTotal + itemInsurance;
-      }, 0);
-
-      // Calculate tax only on product value (excluding insurance)
-      const productValueTotal = updatedData.productDetails.reduce((acc, item) =>
-        acc + (item.price * item.quantity), 0
+      // ✅ 1. Base price (manual only)
+      const productValueTotal = productDetails.reduce(
+        (acc, item) => acc + Number(item.price || 0),
+        0
       );
 
-      const taxAmount = (productValueTotal * (existingQuotation.sTax || 0)) / 100;
-      const sgstAmount = (productValueTotal * (existingQuotation.sgst || 0)) / 100;
+      // ✅ 2. GST sirf price par
+      const taxAmount = (productValueTotal * (Number(sTax) || 0)) / 100;
+      const sgstAmount = (productValueTotal * (Number(sgst) || 0)) / 100;
 
-      updatedData.grandTotal = productTotal + taxAmount + sgstAmount +
-        (existingQuotation.freight || 0) +
-        (existingQuotation.amount || 0);
+      // ✅ 3. GRAND TOTAL (bilty included)
+      calculatedGrandTotal =
+        productValueTotal +
+        taxAmount +
+        sgstAmount +
+        (Number(freight) || 0);
     }
   }
 
@@ -431,7 +449,10 @@ export const getTotalCancelled = asyncHandler(async (req, res) => {
 export const getTotalRevenue = asyncHandler(async (req, res) => {
   const quotations = await Quotation.find();
 
-  const totalRevenue = quotations.reduce((sum, q) => sum + (q.amount || 0), 0);
+  const totalRevenue = quotations.reduce(
+    (sum, q) => sum + (q.paidAmount || 0),
+    0
+  );
 
   console.log("Total Revenue:", totalRevenue);
   res.status(200).json(new ApiResponse(200, { totalRevenue }));
@@ -520,60 +541,45 @@ const getRevenueBookingFilter = (type, user) => {
 // Controller to get revenue details from quotations
 export const getRevenue = asyncHandler(async (req, res) => {
   const filter = getRevenueBookingFilter(req.query.type, req.user);
+
   const quotations = await Quotation.find(filter)
-    .select('bookingId quotationDate startStationName endStation grandTotal computedTotalRevenue amount sTax productDetails')
+    .select(`
+      bookingId
+      quotationDate
+      startStationName
+      endStation
+      grandTotal
+      paidAmount
+      deliveryPendingAmount
+      paymentStatus
+    `)
     .lean();
 
-  // Calculate revenue including insurance
-  const totalRevenue = quotations.reduce((sum, q) => {
-    // Calculate product value total
-    const productValueTotal = q.productDetails.reduce((acc, item) =>
-      acc + (item.price * item.quantity), 0
-    );
+  /* ===============================
+     TOTAL REVENUE (ONLY PAID)
+  =============================== */
+  const totalRevenue = quotations.reduce(
+    (sum, q) => sum + (q.paidAmount || 0),
+    0
+  );
 
-    // Calculate total insurance
-    const totalInsurance = q.productDetails.reduce((acc, item) =>
-      acc + (item.insurance || 0), 0
-    );
-    const totalVppAmount = q.productDetails.reduce((acc, item) =>
-      acc + (item.vppAmount || 0), 0
-    );
-    // Calculate tax on product value only
-    const taxAmount = (productValueTotal * (q.sTax || 0)) / 100;
+  /* ===============================
+     TABLE DATA
+  =============================== */
+  const data = quotations.map((q, index) => ({
+    SNo: index + 1,
+    bookingId: q.bookingId,
+    date: q.quotationDate
+      ? new Date(q.quotationDate).toISOString().slice(0, 10)
+      : "N/A",
+    pickup: q.startStationName || "Unknown",
+    drop: q.endStation || "Unknown",
 
-    // Total revenue = product value + insurance + tax
-    return sum + productValueTotal + totalInsurance + totalVppAmount + taxAmount + (q.amount || 0);
-  }, 0);
-
-  console.log("Total Revenue (including insurance):", totalRevenue);
-
-  const data = quotations.map((q, index) => {
-    // Calculate for each quotation
-    const productValueTotal = q.productDetails.reduce((acc, item) =>
-      acc + (item.price * item.quantity), 0
-    );
-    const totalInsurance = q.productDetails.reduce((acc, item) =>
-      acc + (item.insurance || 0), 0
-    );
-    const totalVppAmount = q.productDetails.reduce((acc, item) =>
-      acc + (item.vppAmount || 0), 0
-    );
-    const taxAmount = (productValueTotal * (q.sTax || 0)) / 100;
-    const revenue = productValueTotal + totalInsurance + totalVppAmount + taxAmount + (q.amount || 0);
-
-    return {
-      SNo: index + 1,
-      bookingId: q.bookingId,
-      date: q.quotationDate ? new Date(q.quotationDate).toISOString().slice(0, 10) : 'N/A',
-      pickup: q.startStationName || 'Unknown',
-      drop: q.endStation || 'Unknown',
-      productValue: productValueTotal.toFixed(2),
-      insurance: totalInsurance.toFixed(2),
-      vppAmount: totalVppAmount.toFixed(2),
-      tax: taxAmount.toFixed(2),
-      revenue: revenue.toFixed(2),
-    };
-  });
+    grandTotal: Number(q.grandTotal || 0).toFixed(2),
+    paidAmount: Number(q.paidAmount || 0).toFixed(2),
+    toPayAmount: Number(q.deliveryPendingAmount || 0).toFixed(2),
+    paymentStatus: q.paymentStatus || "Unpaid",
+  }));
 
   res.status(200).json({
     totalRevenue: totalRevenue.toFixed(2),
@@ -581,6 +587,7 @@ export const getRevenue = asyncHandler(async (req, res) => {
     data,
   });
 });
+
 
 // Update Quotation Status Controller (query only, no cancel reason)
 export const updateQuotationStatus = asyncHandler(async (req, res, next) => {
@@ -790,3 +797,78 @@ export const getIncomingQuotations = asyncHandler(async (req, res) => {
     data: quotations,
   });
 });
+
+
+export const previewReceiptNo = async (req, res) => {
+  const stationCode = req.user.stationCode;
+
+  if (!stationCode) {
+    return res.status(400).json({ message: "StationCode missing" });
+  }
+
+  const receiptNo = await previewNextReceiptNo(stationCode);
+
+  res.status(200).json({
+    success: true,
+    receiptNo,
+  });
+};
+
+export const sendQuotationWhatsapp = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+
+  const body = req.body || {};
+  const { pdfUrl, mobile } = body;
+
+  if (!pdfUrl) {
+    throw new ApiError(400, "pdfUrl is required in request body");
+  }
+
+  let quotation = null;
+  if (bookingId) {
+    quotation = await Quotation.findOne({ bookingId });
+  }
+
+  const finalMobile =
+    mobile ||
+    quotation?.mobile ||
+    quotation?.toContactNumber;
+
+  if (!finalMobile) {
+    throw new ApiError(400, "Customer mobile not available");
+  }
+
+  await sendWhatsappMessage({
+    mobile: finalMobile.startsWith("91")
+      ? finalMobile
+      : `91${finalMobile}`,
+    templateName: "bharatparcel_quotation_slip",
+    pdfUrl,
+    bodyParams: [
+      quotation
+        ? `${quotation.firstName} ${quotation.lastName}`
+        : "Customer",
+      bookingId || "N/A",
+      quotation?.startStationName || "N/A",
+      quotation?.endStation || "N/A",
+      quotation?.fromCustomerName || "N/A",
+      finalMobile,
+      quotation?.toCustomerName || "N/A",
+      quotation?.toContactNumber || finalMobile,
+      quotation?.quotationDate
+        ? quotation.quotationDate.toISOString().slice(0, 10)
+        : "",
+      quotation?.proposedDeliveryDate
+        ? quotation.proposedDeliveryDate.toISOString().slice(0, 10)
+        : "",
+      quotation?.grandTotal?.toFixed(2) || "0.00",
+    ],
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "WhatsApp quotation sent successfully",
+  });
+});
+
+

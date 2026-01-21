@@ -101,11 +101,22 @@ const QcustomerCard = ({ onSelect }) => {
     const handleFetchBlacklisted = () => dispatch(fetchBlackListedCustomer());
 
     const filteredCustomers = Array.isArray(customerList)
-        ? customerList.filter((row) =>
-            row?.name?.toLowerCase()?.includes(searchTerm) ||
-            row?.customerId?.toLowerCase()?.includes(searchTerm)
-        )
+        ? customerList.filter((row) => {
+            const term = searchTerm.toLowerCase();
+
+            return (
+                (row?.name && row.name.toLowerCase().includes(term)) ||
+                (row?.customerId && row.customerId.toLowerCase().includes(term)) ||
+                (row?.contactNumber &&
+                    row.contactNumber.toString().includes(term)) ||
+                (row?.email &&
+                    row.email.toLowerCase().includes(term)) ||
+                (row?.emailId &&
+                    row.emailId.toLowerCase().includes(term))
+            );
+        })
         : [];
+
 
 
     const emptyRows = Math.max(0, (1 + page) * rowsPerPage - filteredCustomers.length);

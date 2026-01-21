@@ -19,6 +19,7 @@ const validationSchema = Yup.object({
     middleName: Yup.string(),
     lastName: Yup.string().required("Required"),
     startStation: Yup.string().required("Required"),
+    stationCode: Yup.string().required("Required"),
     role: Yup.string().required("Required"),
     emailId: Yup.string().email("Invalid email").required("Required"),
     password: Yup.string().required("Required"),
@@ -71,6 +72,7 @@ const UserForm = () => {
             middleName: "",
             lastName: "",
             startStation: "",
+            stationCode: "",
             role: "",
             emailId: "",
             password: "",
@@ -176,6 +178,21 @@ const UserForm = () => {
                             ))}
                         </TextField>
                     </Grid>
+                    <Grid item size={{ xs: 12, md: 4 }}>
+                        <TextField
+                            fullWidth
+                            label="Station Code"
+                            name="stationCode"
+                            value={formik.values.stationCode}
+                            onChange={formik.handleChange}
+                            onBlur={formik.handleBlur}
+                            error={formik.touched.stationCode && Boolean(formik.errors.stationCode)}
+                            helperText={formik.touched.stationCode && formik.errors.stationCode}
+                            placeholder="DEL / MUM"
+                            inputProps={{ style: { textTransform: "uppercase" } }}
+                        />
+                    </Grid>
+
 
                     <Grid item size={{ xs: 12, md: 4 }}>
                         <FormControl fullWidth error={formik.touched.role && Boolean(formik.errors.role)}>

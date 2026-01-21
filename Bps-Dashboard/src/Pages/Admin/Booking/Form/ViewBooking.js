@@ -57,26 +57,28 @@ const ViewBooking = () => {
               select
               fullWidth
               label="Start Station"
-              value={booking.startStation.stationName}
+              value={booking?.startStation?.stationName || ""}
               InputProps={{ readOnly: true }}
             >
-              <MenuItem value={booking.startStation.stationName}>
-                {booking.startStation.stationName}
+              <MenuItem value={booking?.startStation?.stationName || ""}>
+                {booking?.startStation?.stationName || ""}
               </MenuItem>
             </TextField>
+
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               select
               fullWidth
               label="Destination Station"
-              value={booking.endStation.stationName}
+              value={booking?.endStation?.stationName || ""}
               InputProps={{ readOnly: true }}
             >
-              <MenuItem value={booking.endStation.stationName}>
-                {booking.endStation.stationName}
+              <MenuItem value={booking?.endStation?.stationName || ""}>
+                {booking?.endStation?.stationName || ""}
               </MenuItem>
             </TextField>
+
           </Grid>
 
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -143,6 +145,8 @@ const ViewBooking = () => {
           <Grid size={{ xs: 12 }}>
             <Typography variant="h6">From (Address)</Typography>
           </Grid>
+
+
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               fullWidth

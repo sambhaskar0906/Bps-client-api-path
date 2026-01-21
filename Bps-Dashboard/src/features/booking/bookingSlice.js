@@ -4,7 +4,6 @@ import { BOOKINGS_API, WHATSAPP_API } from '../../utils/api';
 
 const BASE_URL = BOOKINGS_API
 
-
 axios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('authToken');
@@ -332,6 +331,20 @@ export const listDeletedBookings = createAsyncThunk(
     }
   }
 );
+export const previewBookingReceiptNo = createAsyncThunk(
+  "booking/previewReceipt",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await axios.get(`${BASE_URL}/preview-receipt`);
+      return res.data.receiptNo;
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "Failed to preview receipt number"
+      );
+    }
+  }
+);
+
 
 const initialState = {
   list: [],
@@ -396,10 +409,13 @@ const initialState = {
     grandTotal: "",
   },
   status: 'idle',
-  error: null,
   viewedbooking: null,
-  createStatus: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
-  createError: null
+  createStatus: 'idle',
+  createError: null,
+  receiptPreview: "",
+  receiptPreviewStatus: "idle",
+  receiptPreviewError: null,
+
 
 };
 const bookingSlice = createSlice({
@@ -414,10 +430,16 @@ const bookingSlice = createSlice({
       state.form = initialState.form;
     },
     addBooking: (state, action) => {
-      state.list.push(action.payload);
+      if (Array.isArray(state.list)) {
+        state.list = [...state.list, action.payload];
+      } else {
+        state.list = [action.payload];
+      }
     },
     setBooking: (state, action) => {
-      state.list = action.payload;
+      state.list = Array.isArray(action.payload)
+        ? action.payload
+        : [];
     },
     clearViewedBooking: (state) => {
       state.viewedBooking = null;
@@ -436,8 +458,14 @@ const bookingSlice = createSlice({
         state.createStatus = 'succeeded'; // Change this
         state.status = 'succeeded'; // Keep existing
         state.error = null;
-        state.list.push(action.payload);
+        if (Array.isArray(state.list)) {
+          state.list = [...state.list, action.payload];
+        } else {
+          state.list = [action.payload];
+        }
         state.loading = false; // Keep existing
+        state.receiptPreview = "";
+        state.receiptPreviewStatus = "idle";
       })
       .addCase(createBooking.rejected, (state, action) => {
         state.createStatus = 'failed'; // Change this
@@ -462,7 +490,9 @@ const bookingSlice = createSlice({
       })
       .addCase(fetchBookingsByType.fulfilled, (state, action) => {
         state.status = 'succeeded';
-        state.list = action.payload.data
+        state.list = Array.isArray(action.payload?.data)
+          ? action.payload.data
+          : [];
       })
       .addCase(fetchBookingsByType.rejected, (state, action) => {
         state.status = 'failed';
@@ -503,11 +533,14 @@ const bookingSlice = createSlice({
         state.status = 'succeeded'
         state.error = null
         const updatedBooking = action.payload
-        const index = state.list.findIndex(booking => booking.bookingId === updatedBooking.bookingId);
-        if (index !== -1) {
-          state.list[index] = updatedBooking;
+        if (Array.isArray(state.list)) {
+          const index = state.list.findIndex(
+            booking => booking.bookingId === updatedBooking.bookingId
+          );
+          if (index !== -1) {
+            state.list[index] = updatedBooking;
+          }
         }
-
         state.form = initialState.form
       })
       //totalReveune
@@ -530,7 +563,9 @@ const bookingSlice = createSlice({
       })
       .addCase(cancelBooking.fulfilled, (state, action) => {
         state.loading = false;
-        state.list = action.payload
+        state.list = state.list.filter(
+          booking => booking._id !== action.payload._id
+        );
       })
       .addCase(cancelBooking.rejected, (state, action) => {
         state.loading = false;
@@ -716,7 +751,27 @@ const bookingSlice = createSlice({
       .addCase(listDeletedBookings.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(previewBookingReceiptNo.pending, (state) => {
+        state.receiptPreviewStatus = "loading";
+        state.receiptPreviewError = null;
+      })
+      .addCase(previewBookingReceiptNo.fulfilled, (state, action) => {
+        state.receiptPreviewStatus = "succeeded";
+        state.receiptPreview = action.payload;
+
+        if (state.createStatus !== "succeeded") {
+          state.form.items = state.form.items.map(item => ({
+            ...item,
+            receiptNo: action.payload
+          }));
+        }
+      })
+      .addCase(previewBookingReceiptNo.rejected, (state, action) => {
+        state.receiptPreviewStatus = "failed";
+        state.receiptPreviewError = action.payload;
       });
+
   }
 });
 

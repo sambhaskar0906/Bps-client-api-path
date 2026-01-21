@@ -39,7 +39,7 @@ import driverRouter from "./src/router/driver.route.js"
 app.use("/api/v2/driver", verifyJwt, roleAccessFilter, driverRouter);
 import CustomerRouter from "./src/router/customer.route.js"
 app.use("/api/v2/customers", verifyJwt, CustomerRouter);
-import QCustomerRouter from "./src/router/Qcustomer.router.js"
+import QCustomerRouter from "./src/router/qcustomer.router.js"
 app.use("/api/v2/qcustomers", verifyJwt, QCustomerRouter);
 import userRouter from "./src/router/user.route.js"
 app.use("/api/v2/users", userRouter)

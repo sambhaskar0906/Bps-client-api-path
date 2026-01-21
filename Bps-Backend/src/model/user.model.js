@@ -62,6 +62,9 @@ const UserSchema = new mongoose.Schema(
     startStation: {
       type: String
     },
+    stationCode: {
+      type: String,
+    },
     role: {
       type: String,
       enum: ['supervisor', 'admin'],

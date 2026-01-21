@@ -21,7 +21,11 @@ import { viewBookingById, updateBookingById } from "../../../../features/booking
 import { fetchStations } from '../../../../features/stations/stationSlice'
 import { fetchStates, fetchCities, clearCities } from '../../../../features/Location/locationSlice';
 
-const toPay = ['pay', 'paid', 'none'];
+const toPay = [
+  { value: "toPay", label: "To Pay" },
+  { value: "paid", label: "Paid" },
+  { value: "none", label: "None" },
+];
 
 const initialValues = {
   startStation: "",
@@ -704,17 +708,18 @@ const EditBooking = () => {
                               select
                               fullWidth
                               size="small"
-                              label="To Pay/Paid"
+                              label="To Pay / Paid"
                               name={`items[${index}].toPay`}
-                              value={item.toPay}
+                              value={item.toPay || "toPay"}
                               onChange={handleChange}
                             >
                               {toPay.map((p) => (
-                                <MenuItem key={p} value={p}>
-                                  {p}
+                                <MenuItem key={p.value} value={p.value}>
+                                  {p.label}
                                 </MenuItem>
                               ))}
                             </TextField>
+
                           </Grid>
                           <Grid size={{ xs: 12, md: 1 }}>
                             <Button

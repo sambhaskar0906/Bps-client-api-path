@@ -47,6 +47,7 @@ import {
   viewBookingById,
   clearViewedBooking
 } from "../../../features/quotation/quotationSlice";
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { finalizeDelivery } from "../../../features/delivery/deliverySlice";
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { Snackbar, Alert } from '@mui/material';
@@ -55,6 +56,10 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import QSlipModal from "../../../Components/QSlipModal";
 
 function descendingComparator(a, b, orderBy) {
+  if (orderBy === "quotationDate") {
+    return new Date(b.quotationDate) - new Date(a.quotationDate); // ✅ DESC date
+  }
+
   if (b[orderBy] < a[orderBy]) return -1;
   if (b[orderBy] > a[orderBy]) return 1;
   return 0;
@@ -100,24 +105,25 @@ const formatDateToDDMMYYYY = (dateString) => {
 
 const headCells = [
   { id: "active", label: "Finalize", sortable: false, width: 80 }, // Added for checkbox
-  { id: "sno", label: "S.No", sortable: false, width: 80 },
+  { id: "sno", label: "S.No", sortable: false, width: 50 },
+  { id: "biltyNo", label: "Bilty No", sortable: false, width: 130 },
   { id: "bookingId", label: "Order By", sortable: true, width: 120 },
   { id: "quotationDate", label: "Date", sortable: true, width: 100 },
-  { id: "senderName", label: "Name", sortable: true, width: 150 },
-  { id: "pickupCity", label: "Pick Up", sortable: false, width: 150 },
-  { id: "receiverName", label: "Name", sortable: false, width: 150 },
-  { id: "dropCity", label: "Drop", sortable: false, width: 150 },
+  { id: "senderName", label: "Name", sortable: true, width: 120 },
+  { id: "pickupCity", label: "Pick Up", sortable: false, width: 120 },
+  { id: "receiverName", label: "Name", sortable: false, width: 120 },
+  { id: "dropCity", label: "Drop", sortable: false, width: 120 },
   { id: "contact", label: "Contact", sortable: false, width: 120 },
   { id: "action", label: "Action", sortable: false, width: 250 },
 ];
 
 const revenueHeadCells = [
-  { id: "sno", label: "S.No", sortable: false, width: 80 },
-  { id: "bookingId", label: "Booking ID", sortable: true, width: 150 },
+  { id: "sno", label: "S.No", sortable: false, width: 50 },
+  { id: "bookingId", label: "Booking ID", sortable: true, width: 120 },
   { id: "date", label: "Date", sortable: true, width: 100 },
-  { id: "pickup", label: "Pick Up", sortable: false, width: 150 },
-  { id: "drop", label: "Drop", sortable: false, width: 150 },
-  { id: "revenue", label: "Revenue (in Rupees)", sortable: false, width: 150 },
+  { id: "pickup", label: "Pick Up", sortable: false, width: 120 },
+  { id: "drop", label: "Drop", sortable: false, width: 80 },
+  { id: "revenue", label: "Revenue (in Rupees)", sortable: false, width: 120 },
   { id: "action", label: "Action", sortable: false, width: 100 },
 ];
 
@@ -125,13 +131,14 @@ const QuotationCard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-
+  const [openWhatsappSnackbar, setOpenWhatsappSnackbar] = useState(false);
+  const [openEmailSnackbar, setOpenEmailSnackbar] = useState(false);
   const cardColor = "#0155a5";
   const cardLightColor = "#e6f0fa";
   const [localModalOpen, setLocalModalOpen] = useState(false);
   const [activeCard, setActiveCard] = useState("request");
-  const [order, setOrder] = useState("asc");
-  const [orderBy, setOrderBy] = useState("senderName");
+  const [order, setOrder] = useState("desc");          // ✅ latest first
+  const [orderBy, setOrderBy] = useState("quotationDate"); // ✅ date based
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchTerm, setSearchTerm] = useState("");
@@ -222,11 +229,43 @@ const QuotationCard = () => {
     setPage(0);
   };
 
-  const handleSend = (bookingId) => {
-    dispatch(sendWhatsAppMsg(bookingId))
+  const handleEmailSend = (bookingId) => {
+    if (!bookingId) return;
+
+    const confirmSend = window.confirm(
+      "Are you sure you want to send this quotation via Email?"
+    );
+
+    if (!confirmSend) return;
+
     dispatch(sendBookingEmail(bookingId))
-    setOpenSnackbar(true);
-  }
+      .unwrap()
+      .then(() => {
+        setOpenEmailSnackbar(true);
+      })
+      .catch((err) => {
+        alert(err || "Failed to send Email");
+      });
+  };
+
+  const handleWhatsAppSend = (bookingId) => {
+    if (!bookingId) return;
+
+    const confirmSend = window.confirm(
+      "Are you sure you want to send this quotation on WhatsApp?"
+    );
+
+    if (!confirmSend) return;
+
+    dispatch(sendWhatsAppMsg(bookingId))
+      .unwrap()
+      .then(() => {
+        setOpenWhatsappSnackbar(true);
+      })
+      .catch((err) => {
+        alert(err || "Failed to send WhatsApp");
+      });
+  };
 
   const handleSlipClick = (bookingId) => {
     dispatch(viewBookingById(bookingId))
@@ -248,20 +287,24 @@ const QuotationCard = () => {
 
   const filteredRows = Array.isArray(dataSource)
     ? dataSource.filter((row) => {
+      const q = searchTerm.toLowerCase();
+
       return (
-        row?.senderName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.receiverName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.contact?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.bookingId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.Name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.["Name (Drop)"]?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.Contact?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.["Booking ID"]?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.Date?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row?.quotationDate?.toLowerCase().includes(searchTerm.toLowerCase())
+        row?.biltyNo?.toLowerCase().includes(q) ||
+        row?.senderName?.toLowerCase().includes(q) ||
+        row?.receiverName?.toLowerCase().includes(q) ||
+        row?.contact?.toLowerCase().includes(q) ||
+        row?.bookingId?.toLowerCase().includes(q) ||
+        row?.Name?.toLowerCase().includes(q) ||
+        row?.["Name (Drop)"]?.toLowerCase().includes(q) ||
+        row?.Contact?.toLowerCase().includes(q) ||
+        row?.["Booking ID"]?.toLowerCase().includes(q) ||
+        row?.Date?.toLowerCase().includes(q) ||
+        row?.quotationDate?.toLowerCase().includes(q)
       );
     })
     : [];
+
 
   const emptyRows = Math.max(0, (1 + page) * rowsPerPage - filteredRows.length);
 
@@ -406,8 +449,19 @@ const QuotationCard = () => {
           />
         </Box>
 
-        <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto' }}>
-          <Table sx={{ minWidth: 1200 }}>
+        <TableContainer component={Paper} sx={{ borderRadius: 2, overflowX: 'auto', width: "100%", }}>
+          <Table
+            sx={{
+              width: "100%",
+              tableLayout: "fixed",
+              "& .MuiTableCell-root": {
+                padding: "6px 8px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }
+            }}
+          >
             <TableHead sx={{ backgroundColor: "#1565c0" }}>
               <TableRow>
                 {displayHeadCells
@@ -456,7 +510,9 @@ const QuotationCard = () => {
                           {page * rowsPerPage + index + 1}
                         </TableCell>
                         <Tooltip title={row.bookingId || ""} arrow>
-                          <TableCell sx={{ whiteSpace: "nowrap", minWidth: 150 }}>
+                          <TableCell sx={{
+                            whiteSpace: "nowrap", width: 120
+                          }}>
                             {row.bookingId}
                           </TableCell>
                         </Tooltip>
@@ -464,16 +520,18 @@ const QuotationCard = () => {
                           {formatDateToDDMMYYYY(row.date)}
                         </TableCell>
                         <Tooltip title={row.pickup || ""} arrow>
-                          <TableCell sx={{ whiteSpace: "nowrap", minWidth: 150 }}>
+                          <TableCell sx={{
+                            whiteSpace: "nowrap", width: 120
+                          }}>
                             {row.pickup}
                           </TableCell>
                         </Tooltip>
                         <Tooltip title={row.drop || ""} arrow>
-                          <TableCell sx={{ whiteSpace: "nowrap", minWidth: 150 }}>
+                          <TableCell sx={{ whiteSpace: "nowrap", minWidth: 80 }}>
                             {row.drop}
                           </TableCell>
                         </Tooltip>
-                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 150 }}>
+                        <TableCell sx={{ whiteSpace: "nowrap", minWidth: 120 }}>
                           {row.revenue ?? "-"}
                         </TableCell>
                         <TableCell sx={{ whiteSpace: "nowrap", minWidth: 100 }}>
@@ -506,6 +564,9 @@ const QuotationCard = () => {
 
                         <TableCell sx={{ whiteSpace: "nowrap", minWidth: 80 }}>
                           {page * rowsPerPage + index + 1}
+                        </TableCell>
+                        <TableCell sx={{ whiteSpace: "nowrap", width: 130 }}>
+                          {row.biltyNo || "-"}
                         </TableCell>
                         <Tooltip title={row.orderBy || row.bookingId || ""} arrow>
                           <TableCell sx={{ whiteSpace: "nowrap", minWidth: 120 }}>
@@ -585,14 +646,35 @@ const QuotationCard = () => {
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
-                            <Tooltip title="Send" arrow>
+                            <Tooltip title="Send Email" arrow>
                               <IconButton
                                 size="small"
                                 color="primary"
-                                onClick={() => handleSend(row['Booking ID'] || row.bookingId)}
-                                sx={{ minWidth: 'auto', padding: '6px' }}
+                                onClick={() =>
+                                  handleEmailSend(row["Booking ID"] || row.bookingId)
+                                }
+                                sx={{ padding: "6px" }}
                               >
                                 <SendIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Send WhatsApp" arrow>
+                              <IconButton
+                                size="small"
+                                sx={{
+                                  color: "#128C7E",
+                                  backgroundColor: "#E6F4EA",
+                                  padding: "6px",
+                                  "&:hover": {
+                                    backgroundColor: "#CDEEDB",
+                                    color: "#075E54",
+                                  }
+                                }}
+                                onClick={() =>
+                                  handleWhatsAppSend(row["Booking ID"] || row.bookingId)
+                                }
+                              >
+                                <WhatsAppIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Slip" arrow>
@@ -646,13 +728,32 @@ const QuotationCard = () => {
         />
 
         <Snackbar
-          open={openSnackbar}
+          open={openEmailSnackbar}
           autoHideDuration={3000}
-          onClose={() => setOpenSnackbar(false)}
+          onClose={() => setOpenEmailSnackbar(false)}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          <Alert onClose={() => setOpenSnackbar(false)} severity="success" variant="filled" sx={{ width: '100%' }}>
-            Share link sent via WhatsApp and Email!
+          <Alert
+            onClose={() => setOpenEmailSnackbar(false)}
+            severity="info"
+            variant="filled"
+          >
+            Email sent successfully 📧
+          </Alert>
+        </Snackbar>
+
+        <Snackbar
+          open={openWhatsappSnackbar}
+          autoHideDuration={3000}
+          onClose={() => setOpenWhatsappSnackbar(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setOpenWhatsappSnackbar(false)}
+            severity="success"
+            variant="filled"
+          >
+            WhatsApp message sent successfully 📲
           </Alert>
         </Snackbar>
       </Box>

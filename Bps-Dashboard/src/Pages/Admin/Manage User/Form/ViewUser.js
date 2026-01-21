@@ -125,6 +125,7 @@ const UserView = () => {
                                 <Divider sx={{ mb: 2 }} />
                                 <Grid container spacing={2}>
                                     <StyledTextField label="Start Station" value={form?.startStation} />
+                                    <StyledTextField label="Station Code" value={form?.stationCode} />
                                     <StyledTextField label="Address" value={form?.address} />
                                     <StyledTextField label="State" value={form?.state} />
                                     <StyledTextField label="City" value={form?.city} />

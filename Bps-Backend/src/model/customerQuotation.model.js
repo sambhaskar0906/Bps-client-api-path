@@ -1,4 +1,7 @@
 import mongoose from "mongoose";
+import { User } from "../model/user.model.js";
+import { generateAndCommitReceiptNo } from "../utils/generateReceiptNo.js";
+
 const quotationSchema = new mongoose.Schema({
   bookingId: {
     type: String,
@@ -7,7 +10,7 @@ const quotationSchema = new mongoose.Schema({
   customerId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    ref: "QCustomer", // Fixed reference name
+    ref: "QCustomer",
   },
   startStation: {
     type: mongoose.Schema.Types.ObjectId,
@@ -96,6 +99,21 @@ const quotationSchema = new mongoose.Schema({
   grandTotal: {
     type: Number,
   },
+  paidAmount: {
+    type: Number,
+    default: 0
+  },
+
+  deliveryPendingAmount: {
+    type: Number,
+    default: 0
+  },
+
+  paymentStatus: {
+    type: String,
+    enum: ["Paid", "Partial", "Unpaid"],
+    default: "Unpaid"
+  },
   amount: {
     type: Number,
     default: 0,
@@ -103,6 +121,10 @@ const quotationSchema = new mongoose.Schema({
   freight: {
     type: Number,
     default: 0
+  },
+  insVppAmount: {
+    type: Number,
+    default: 0,
   },
   productDetails: [
     {
@@ -187,7 +209,10 @@ const quotationSchema = new mongoose.Schema({
 
 // Virtual for product total
 quotationSchema.virtual("productTotal").get(function () {
-  return this.productDetails.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  return this.productDetails.reduce(
+    (acc, item) => acc + Number(item.price || 0),
+    0
+  );
 });
 
 // Virtual for total quantity
@@ -205,25 +230,113 @@ quotationSchema.virtual("totalTax").get(function () {
 
 // Virtual for computed total revenue
 quotationSchema.virtual("computedTotalRevenue").get(function () {
-  const productTotal = this.productTotal;
-  const totalTax = this.totalTax;
-  return productTotal + totalTax + this.freight + this.amount;
+  return (
+    this.productTotal +        // base price
+    this.totalTax +            // GST
+    (this.freight || 0) +      // bilty
+    (this.insVppAmount || 0)   // ✅ INS/VPP
+  );
 });
 
 quotationSchema.pre("save", async function (next) {
-  // Generate booking ID if not set
-  if (!this.bookingId) {
-    const randomNumber = Math.floor(1000 + Math.random() * 9000);
-    this.bookingId = `BHPAR${randomNumber}QUOK`;
-  }
+  try {
+    /* ===============================
+       1️⃣ SAFE & UNIQUE BOOKING ID
+    =============================== */
+    if (!this.bookingId) {
+      let unique = false;
 
-  // Calculate grandTotal if not set
-  if (!this.grandTotal) {
+      while (!unique) {
+        const random = Math.floor(1000 + Math.random() * 9000);
+        const time = Date.now().toString().slice(-4);
+        const bookingId = `BHPAR${random}${time}QUOK`;
+
+        const exists = await mongoose.models.Quotation.findOne({ bookingId });
+        if (!exists) {
+          this.bookingId = bookingId;
+          unique = true;
+        }
+      }
+    }
+
+    /* ===============================
+       2️⃣ GRAND TOTAL
+    =============================== */
     this.grandTotal = this.computedTotalRevenue;
-  }
 
-  next();
+    /* ===============================
+   3️⃣ PAID / TO PAY LOGIC (Quotation)
+=============================== */
+
+    let paidItemTotal = 0;
+    let toPayItemTotal = 0;
+
+    this.productDetails.forEach(item => {
+      const amt = Number(item.price || 0) * Number(item.quantity || 1);
+
+      if (item.topay === "paid") paidItemTotal += amt;
+      if (item.topay === "toPay") toPayItemTotal += amt;
+    });
+
+    // ALL PAID
+    if (paidItemTotal > 0 && toPayItemTotal === 0) {
+      this.paidAmount = this.grandTotal;
+      this.deliveryPendingAmount = 0;
+    }
+    // ALL TO PAY
+    else if (toPayItemTotal > 0 && paidItemTotal === 0) {
+      this.paidAmount = 0;
+      this.deliveryPendingAmount = this.grandTotal;
+    }
+    // MIXED
+    else {
+      const total = paidItemTotal + toPayItemTotal;
+      const paidRatio = total > 0 ? paidItemTotal / total : 0;
+
+      this.paidAmount = Math.round(this.grandTotal * paidRatio);
+      this.deliveryPendingAmount = this.grandTotal - this.paidAmount;
+    }
+
+    /* ===============================
+       4️⃣ PAYMENT STATUS
+    =============================== */
+
+    if (this.paidAmount >= this.grandTotal) {
+      this.paymentStatus = "Paid";
+    } else if (this.paidAmount > 0) {
+      this.paymentStatus = "Partial";
+    } else {
+      this.paymentStatus = "Unpaid";
+    }
+
+
+    /* ===============================
+       3️⃣ RECEIPT NUMBER COMMIT
+    =============================== */
+    if (this.isNew && this.productDetails?.length) {
+
+      // ✅ createdByUser = USER _id (ObjectId)
+      const user = await User.findById(this.createdByUser);
+
+      if (!user || !user.stationCode) {
+        throw new Error("StationCode not found");
+      }
+
+      const receiptNo = await generateAndCommitReceiptNo(user.stationCode);
+
+      // ✅ same receipt for all products
+      this.productDetails = this.productDetails.map(item => ({
+        ...item,
+        receiptNo,
+      }));
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
 });
+
 
 const Quotation = mongoose.models.Quotation || mongoose.model("Quotation", quotationSchema);
 export default Quotation;

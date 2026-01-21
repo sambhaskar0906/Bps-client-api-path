@@ -24,7 +24,14 @@ export const verifyJwt = asyncHandler(async (req, res, next) => {
       throw new ApiError(401, "Invalid user");
     }
 
-    req.user = user;
+    req.user = {
+      _id: user._id,
+      adminId: user.adminId,
+      role: user.role,
+      startStation: user.startStation,
+      stationCode: user.stationCode
+    };
+
     next();
   } catch (error) {
     console.error("JWT verification error:", error.message);

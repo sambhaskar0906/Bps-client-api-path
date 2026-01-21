@@ -6,12 +6,6 @@ const manageStationSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    stationCode: {
-        type: String,
-        required: true,
-        unique: true,
-        uppercase: true
-    },
     contact: {
         type: String,
         required: true,

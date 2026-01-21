@@ -18,8 +18,9 @@ import {
   sendBookingEmail,
   sendBookingEmailById,
   getBookingSummaryByDate,
-  getIncomingQuotations
-
+  getIncomingQuotations,
+  previewReceiptNo,
+  sendQuotationWhatsapp
 
 } from "../controller/customerQuotation.controller.js";
 import { parseFormData } from "../middleware/multerParser.middleware.js";
@@ -52,8 +53,10 @@ router.get("/revenue-list", verifyJwt, getRevenue)
 
 router.get("/send-Booking-Email/:bookingId", sendBookingEmailById)
 
-router.post("/booking-summary-date", verifyJwt, getBookingSummaryByDate)
+router.post("/send-whatsapp/:bookingId", verifyJwt, sendQuotationWhatsapp);
 
+router.post("/booking-summary-date", verifyJwt, getBookingSummaryByDate)
+router.get("/receipt/preview", verifyJwt, previewReceiptNo);
 
 router.get("/booking-request-list", verifyJwt, RequestBookingList)
 

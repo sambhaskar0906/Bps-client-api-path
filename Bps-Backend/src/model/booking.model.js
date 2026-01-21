@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import { User } from "../model/user.model.js";
+import { generateAndCommitBookingReceiptNo } from "../utils/generateReceiptNo.js";
 
 // Single shipment item schema
 const ItemSchema = new mongoose.Schema({
@@ -46,9 +48,6 @@ const BookingSchema = new mongoose.Schema(
       type: String,
       unique: true
     },
-
-    // Linked customer
-
 
     // Start & end stations
     startStation: {
@@ -137,6 +136,12 @@ const BookingSchema = new mongoose.Schema(
       type: String,
       required: true
     },
+    receiverContact: {
+      type: String
+    },
+    receiverEmail: {
+      type: String
+    },
     receiverGgt: {
       type: String,
       required: true
@@ -218,6 +223,15 @@ const BookingSchema = new mongoose.Schema(
       type: Number,
       default: 0
     },
+    pickupCollectedAmount: {
+      type: Number,
+      default: 0
+    },
+
+    deliveryPendingAmount: {
+      type: Number,
+      default: 0
+    },
     paymentStatus: {
       type: String,
       enum: ['Paid', 'Partial', 'Unpaid'],
@@ -290,30 +304,108 @@ BookingSchema.pre('validate', function (next) {
   next();
 });
 
-// Calculate totals before saving
-// Calculate totals before saving
-BookingSchema.pre('save', function (next) {
-  // Preserve billTotal from frontend if provided, otherwise calculate from items
-  if ((this.billTotal === undefined || this.billTotal === null) && Array.isArray(this.items)) {
-    const itemAmounts = this.items.map(item => Number(item.amount) || 0);
-    this.billTotal = itemAmounts.reduce((sum, val) => sum + val, 0);
+BookingSchema.pre("save", async function (next) {
+  try {
+    /* -----------------------------
+       1️⃣ BILL TOTAL
+    ----------------------------- */
+    if ((this.billTotal === undefined || this.billTotal === null) && Array.isArray(this.items)) {
+      this.billTotal = this.items.reduce(
+        (sum, i) => sum + (Number(i.amount) || 0),
+        0
+      );
+    }
+
+    /* -----------------------------
+       2️⃣ GRAND TOTAL
+    ----------------------------- */
+    if (this.grandTotal === undefined || this.grandTotal === null) {
+      this.grandTotal =
+        (this.billTotal || 0) +
+        (this.freight || 0) +
+        (this.ins_vpp || 0) +
+        (this.cgst || 0) +
+        (this.sgst || 0) +
+        (this.igst || 0);
+    }
+
+    this.computedTotalRevenue = this.grandTotal;
+
+    /* -----------------------------
+     FINAL PAYMENT SPLIT LOGIC
+  ----------------------------- */
+
+    let paidItemTotal = 0;
+    let toPayItemTotal = 0;
+
+    this.items.forEach(item => {
+      const amt = Number(item.amount) || 0;
+      if (item.toPay === "paid") paidItemTotal += amt;
+      if (item.toPay === "toPay") toPayItemTotal += amt;
+    });
+
+    // ALL PAID
+    if (paidItemTotal > 0 && toPayItemTotal === 0) {
+      this.pickupCollectedAmount = this.grandTotal;
+      this.deliveryPendingAmount = 0;
+    }
+    // ALL TO PAY
+    else if (toPayItemTotal > 0 && paidItemTotal === 0) {
+      this.pickupCollectedAmount = 0;
+      this.deliveryPendingAmount = this.grandTotal;
+    }
+    // MIXED
+    else {
+      const totalItemAmount = paidItemTotal + toPayItemTotal;
+      const paidRatio = paidItemTotal / totalItemAmount;
+
+      this.pickupCollectedAmount = Math.round(this.grandTotal * paidRatio);
+      this.deliveryPendingAmount =
+        this.grandTotal - this.pickupCollectedAmount;
+    }
+
+    /* -----------------------------
+   4️⃣ PAYMENT STATUS
+----------------------------- */
+
+    this.paidAmount = this.pickupCollectedAmount;
+
+    if (this.paidAmount >= this.grandTotal) {
+      this.paymentStatus = "Paid";
+    } else if (this.paidAmount > 0) {
+      this.paymentStatus = "Partial";
+    } else {
+      this.paymentStatus = "Unpaid";
+    }
+
+    /* -----------------------------
+      RECEIPT NUMBER (BOOKING)
+   ----------------------------- */
+    if (this.isNew && this.items?.length) {
+
+      // createdByUser MUST be ObjectId
+      const user = await User.findById(this.createdByUser)
+        .select("stationCode")
+        .lean();
+
+      if (!user?.stationCode) {
+        throw new Error("StationCode not found for booking receipt");
+      }
+
+      const receiptNo =
+        await generateAndCommitBookingReceiptNo(user.stationCode);
+
+      // 🔥 Same receipt for all items
+      this.items = this.items.map(item => ({
+        ...item,
+        receiptNo,
+      }));
+    }
+
+    next();
+  } catch (err) {
+    next(err);
   }
-
-  // Preserve grandTotal from frontend if provided, otherwise calculate
-  if (this.grandTotal === undefined || this.grandTotal === null) {
-    this.grandTotal =
-      (this.billTotal || 0) +
-      (Number(this.freight) || 0) +
-      (Number(this.ins_vpp) || 0) +
-      (Number(this.cgst) || 0) +
-      (Number(this.sgst) || 0) +
-      (Number(this.igst) || 0);
-  }
-
-  // Assign computed revenue (use grandTotal directly)
-  this.computedTotalRevenue = this.grandTotal || 0;
-
-  next();
 });
 
 

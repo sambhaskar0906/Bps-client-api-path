@@ -21,7 +21,7 @@ const EditUser = () => {
     const [form, setForm] = useState({
         firstName: '', middleName: '', lastName: '',
         contactNumber: '', emailId: '',
-        address: '', state: '', startStation: '', city: '', distinct: '', pincode: '',
+        address: '', state: '', startStation: '', stationCode: '', city: '', distinct: '', pincode: '',
         idProof: '', idPhoto: '', adminPhoto: ''
     });
 
@@ -55,6 +55,8 @@ const EditUser = () => {
                 city: userData.city || '',
                 distinct: userData.distinct || '',
                 pincode: userData.pincode || '',
+                startStation: userData.startStation || '',
+                stationCode: userData.stationCode || '',
                 idProof: userData.idProof || '',
                 idPhoto: userData.idPhoto || '',
                 adminPhoto: userData.adminPhoto || ''
@@ -179,6 +181,25 @@ const EditUser = () => {
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
                                         <TextField label="Email" name="emailId" value={form.emailId} onChange={handleChange} fullWidth />
+                                    </Grid>
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField
+                                            label="Station Name"
+                                            name="startStation"
+                                            value={form.startStation}
+                                            onChange={handleChange}
+                                            fullWidth
+                                        />
+                                    </Grid>
+
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField
+                                            label="Station Code"
+                                            name="stationCode"
+                                            value={form.stationCode}
+                                            onChange={handleChange}
+                                            fullWidth
+                                        />
                                     </Grid>
                                 </Grid>
                             </CardContent>

@@ -232,6 +232,7 @@ const initialState = {
         middleName: "",
         lastName: "",
         startStation: "",
+        stationCode: "",
         emailId: "",
         password: "",
         contactNumber: "",
@@ -318,6 +319,7 @@ const userSlice = createSlice({
                     pincode: payload.pincode || '',
                     idProof: payload.idProof || '',
                     startStation: payload.startStation || '',
+                    stationCode: payload.stationCode || '',
                     idPhoto: payload.idProofPhoto
                         ? `${FILES_BASE_URL}/${payload.idProofPhoto.replace(/\\/g, '/').replace(/^\/+/g, '')}`
                         : null,

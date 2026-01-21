@@ -1,309 +1,233 @@
 import React, { useEffect } from "react";
 import {
     Box,
-    Typography,
-    Paper,
     Grid,
-    Divider,
-    Card,
-    CardContent,
+    Typography,
     TextField,
+    MenuItem,
     Button,
+    CircularProgress,
 } from "@mui/material";
+import { ArrowBack } from "@mui/icons-material";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { LocalizationProvider } from "@mui/x-date-pickers";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { viewBookingById } from "../../../../features/quotation/quotationSlice";
-import { CircularProgress } from "@mui/material";
-import { Home, LocalShipping, InsertDriveFile } from "@mui/icons-material";
-import { ArrowBack } from '@mui/icons-material';
 
-const StyledTextField = ({ label, value }) => (
-    <Grid size={{ xs: 12, md: 4 }}>
-        <TextField
-            label={label}
-            value={value || "-"}
-            fullWidth
-            variant="outlined"
-            InputProps={{
-                readOnly: true,
-                style: {
-                    borderRadius: 12,
-                    backgroundColor: "#fff",
-                },
-            }}
-            InputLabelProps={{
-                style: {
-                    fontWeight: 600,
-                },
-            }}
-            sx={{
-                "& .MuiOutlinedInput-root": {
-                    "&:hover fieldset": {
-                        borderColor: "#1976d2",
-                    },
-                    "&.Mui-focused fieldset": {
-                        borderColor: "#1976d2",
-                        boxShadow: "0 0 0 2px rgba(25, 118, 210, 0.2)",
-                    },
-                },
-                mb: 2,
-            }}
-        />
-    </Grid>
-);
-
-const SectionHeader = ({ icon, title }) => (
-    <Box
-        sx={{
-            bgcolor: "primary.light",
-            px: 2,
-            py: 1,
-            borderRadius: 1,
-            display: "flex",
-            alignItems: "center",
-            mb: 2,
-        }}
-    >
-        {icon}
-        <Typography variant="h6" fontWeight={600} ml={1}>
-            {title}
-        </Typography>
-    </Box>
-);
+/* ---------- Date Formatter (DD-MM-YYYY) ---------- */
+const formatDate = (dateStr) => {
+    if (!dateStr) return "";
+    const d = new Date(dateStr);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+};
 
 const ViewQuotation = () => {
-    const dispatch = useDispatch();
     const navigate = useNavigate();
     const { bookingId } = useParams();
-    const { viewedBooking, loading } = useSelector((state) => state.quotations);
+    const dispatch = useDispatch();
+
+    const { viewedBooking, loading } = useSelector(
+        (state) => state.quotations
+    );
 
     useEffect(() => {
-        if (bookingId) dispatch(viewBookingById(bookingId));
+        if (bookingId) {
+            dispatch(viewBookingById(bookingId));
+        }
     }, [bookingId, dispatch]);
 
     if (loading || !viewedBooking) {
         return (
-            <Box p={3}>
+            <Box sx={{ p: 4, textAlign: "center" }}>
                 <CircularProgress />
             </Box>
         );
     }
 
-    const data = viewedBooking;
-
-    // ✅ Calculate total insurance
-    const totalInsurance = data.productDetails?.reduce((sum, item) =>
-        sum + (Number(item.insurance) || 0), 0) || 0;
-
-    // ✅ Bilty Amount fixed 20 रुपये
-    const biltyAmount = 20;
-
-    // ✅ Product Total (price × quantity)
-    const productTotal = data.productDetails?.reduce((sum, item) =>
-        sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0) || 0;
-
-    // ✅ Bill Total = Product Total + Total Insurance + Bilty Amount
-    const billTotal = productTotal + totalInsurance + biltyAmount;
-
-    // ✅ Tax calculation on product value only (not on insurance)
-    const taxAmount = (productTotal * (data.sTax || 0)) / 100;
-
-    // ✅ Grand Total before rounding
-    const grandTotalBeforeRound = billTotal + taxAmount;
-
-    // ✅ Round off calculations
-    const roundedGrandTotal = Math.round(grandTotalBeforeRound);
-    const roundOff = (roundedGrandTotal - grandTotalBeforeRound).toFixed(2);
-
-    console.log("View Quotation Data:", data);
+    const q = viewedBooking;
 
     return (
-        <LocalizationProvider dateAdapter={AdapterDateFns}>
+        <>
             <Button
                 variant="outlined"
                 startIcon={<ArrowBack />}
                 onClick={() => navigate(-1)}
-                sx={{ mr: 2 }}
+                sx={{ mb: 2 }}
             >
                 Back
             </Button>
-            <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1200, mx: "auto" }}>
-                <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
-                    <Typography variant="h4" fontWeight={600} mb={2}>
-                        Quotation Details - {data.bookingId}
-                    </Typography>
 
-                    {/* Booking Info */}
-                    <Card sx={{ mt: 2, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<InsertDriveFile />} title="Booking Details" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <StyledTextField label="Booking ID" value={data.bookingId} />
-                                <StyledTextField label="Start Station" value={data.startStationName} />
-                                <StyledTextField label="Destination Station" value={data.endStation} />
-                                <Grid size={{ xs: 12, md: 6 }}>
-                                    <TextField
-                                        label="Booking Date"
-                                        value={new Date(data.quotationDate).toLocaleDateString('en-IN')}
-                                        fullWidth
-                                        InputProps={{ readOnly: true }}
-                                        sx={{ mb: 2 }}
-                                    />
-                                </Grid>
-                                <Grid size={{ xs: 12, md: 6 }}>
-                                    <TextField
-                                        label="Proposed Delivery Date"
-                                        value={new Date(data.proposedDeliveryDate).toLocaleDateString('en-IN')}
-                                        fullWidth
-                                        InputProps={{ readOnly: true }}
-                                        sx={{ mb: 2 }}
-                                    />
-                                </Grid>
+            <Box sx={{ p: 3, maxWidth: 1200, mx: "auto" }}>
+                <Grid container spacing={2}>
+
+                    {/* ---------- Booking Details ---------- */}
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField
+                            fullWidth
+                            label="Start Station"
+                            value={q.startStationName}
+                            InputProps={{ readOnly: true }}
+                        />
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField
+                            fullWidth
+                            label="Destination Station"
+                            value={q.endStation}
+                            InputProps={{ readOnly: true }}
+                        />
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField
+                            fullWidth
+                            label="Booking Date"
+                            value={formatDate(q.quotationDate)}
+                            InputProps={{ readOnly: true }}
+                        />
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField
+                            fullWidth
+                            label="Proposed Delivery Date"
+                            value={formatDate(q.proposedDeliveryDate)}
+                            InputProps={{ readOnly: true }}
+                        />
+                    </Grid>
+
+                    {/* ---------- Customer Info ---------- */}
+                    <Grid size={{ xs: 12 }}>
+                        <Typography variant="h6">Customer Information</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="First Name" value={q.firstName} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Middle Name" value={q.middleName} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Last Name" value={q.lastName} InputProps={{ readOnly: true }} />
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Mobile" value={q.mobile} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Email" value={q.email} InputProps={{ readOnly: true }} />
+                    </Grid>
+
+                    {/* ---------- From Address ---------- */}
+                    <Grid size={{ xs: 12 }}>
+                        <Typography variant="h6">From (Address)</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Name" value={q.fromCustomerName} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Contact Number" value={q.mobile} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Address" value={q.fromAddress} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="City" value={q.fromCity} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="State" value={q.fromState} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Pincode" value={q.fromPincode} InputProps={{ readOnly: true }} />
+                    </Grid>
+
+                    {/* ---------- To Address ---------- */}
+                    <Grid size={{ xs: 12 }}>
+                        <Typography variant="h6">To (Address)</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Name" value={q.toCustomerName} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Contact Number" value={q.toContactNumber} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Address" value={q.toAddress} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="City" value={q.toCity} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="State" value={q.toState} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 6 }}>
+                        <TextField fullWidth label="Pincode" value={q.toPincode} InputProps={{ readOnly: true }} />
+                    </Grid>
+
+                    {/* ---------- Product Details ---------- */}
+                    <Grid size={{ xs: 12 }}>
+                        <Typography variant="h6">Product Details</Typography>
+                    </Grid>
+
+                    {q.productDetails.map((item, index) => (
+                        <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
+                            <Grid size={{ xs: 12, sm: 2 }}>
+                                <TextField fullWidth label="Receipt No" value={item.receiptNo} InputProps={{ readOnly: true }} />
                             </Grid>
-                        </CardContent>
-                    </Card>
-
-                    {/* Customer Info */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<InsertDriveFile />} title="Customer Information" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <StyledTextField label="First Name" value={data.firstName} />
-                                <StyledTextField label="Middle Name" value={data.middleName} />
-                                <StyledTextField label="Last Name" value={data.lastName} />
-                                <StyledTextField label="Contact Number" value={data.mobile} />
-                                <StyledTextField label="Email" value={data.email} />
-                                <StyledTextField label="Locality" value={data.locality || "-"} />
+                            <Grid size={{ xs: 12, sm: 2 }}>
+                                <TextField fullWidth label="Ref No" value={item.refNo} InputProps={{ readOnly: true }} />
                             </Grid>
-                        </CardContent>
-                    </Card>
-
-                    {/* From Address */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<Home />} title="From Address" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <StyledTextField label="Name" value={data.fromCustomerName} />
-                                <StyledTextField label="Locality / Street" value={data.fromAddress} />
-                                <StyledTextField label="State" value={data.fromState} />
-                                <StyledTextField label="City" value={data.fromCity} />
-                                <StyledTextField label="Pin Code" value={data.fromPincode} />
+                            <Grid size={{ xs: 12, sm: 2 }}>
+                                <TextField fullWidth label="Name" value={item.name} InputProps={{ readOnly: true }} />
                             </Grid>
-                        </CardContent>
-                    </Card>
-
-                    {/* To Address */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<LocalShipping />} title="To Address" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <StyledTextField label="Name" value={data.toCustomerName} />
-                                <StyledTextField label="Locality / Street" value={data.toAddress} />
-                                <StyledTextField label="State" value={data.toState} />
-                                <StyledTextField label="City" value={data.toCity} />
-                                <StyledTextField label="Pin Code" value={data.toPincode} />
-                                {data.toContactNumber && (
-                                    <StyledTextField label="Contact Number" value={data.toContactNumber} />
-                                )}
-                                {data.toEmail && (
-                                    <StyledTextField label="Email" value={data.toEmail} />
-                                )}
+                            <Grid size={{ xs: 12, sm: 1 }}>
+                                <TextField fullWidth label="Qty" value={item.quantity} InputProps={{ readOnly: true }} />
                             </Grid>
-                        </CardContent>
-                    </Card>
-
-                    {/* Product Details */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<InsertDriveFile />} title="Product Details" />
-                            <Divider sx={{ mb: 2 }} />
-                            {Array.isArray(data.productDetails) && data.productDetails.map((item, index) => (
-                                <React.Fragment key={index}>
-                                    <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1, color: 'primary.main' }}>
-                                        Product {index + 1}
-                                    </Typography>
-                                    <Grid container spacing={2} sx={{ mb: 3, pb: 2, borderBottom: '1px solid #e0e0e0' }}>
-                                        <StyledTextField
-                                            label="Receipt No."
-                                            value={item.receiptNo || "-"}
-                                        />
-                                        <StyledTextField
-                                            label="Ref No."
-                                            value={item.refNo || "-"}
-                                        />
-                                        <StyledTextField label="Product Name" value={item.name} />
-                                        <StyledTextField label="Quantity" value={item.quantity} />
-                                        <StyledTextField label="Weight (Kgs)" value={item.weight} />
-                                        <StyledTextField label="Price (₹)" value={item.price} />
-                                        <StyledTextField label="Insurance (₹)" value={item.insurance || "0"} />
-                                        <StyledTextField
-                                            label="VPP Amount (₹)"
-                                            value={item.vppAmount || "0"}
-                                        />
-                                        <StyledTextField label="Payment Status" value={item.topay} />
-                                        <StyledTextField
-                                            label="Total Value (₹)"
-                                            value={(item.price * item.quantity).toFixed(2)}
-                                        />
-                                    </Grid>
-                                </React.Fragment>
-                            ))}
-                        </CardContent>
-                    </Card>
-
-                    {/* Financial Summary */}
-                    <Card sx={{ mt: 3, p: 2, bgcolor: "grey.50" }}>
-                        <CardContent>
-                            <SectionHeader icon={<InsertDriveFile />} title="Financial Summary" />
-                            <Divider sx={{ mb: 2 }} />
-                            <Grid container spacing={2}>
-                                <StyledTextField
-                                    label="Product Total (Price × Quantity)"
-                                    value={productTotal.toFixed(2)}
-                                />
-                                <StyledTextField
-                                    label="Total Insurance"
-                                    value={totalInsurance.toFixed(2)}
-                                />
-                                <StyledTextField label="Bilty Amount" value={biltyAmount.toFixed(2)} />
-                                <StyledTextField label="Bill Total" value={billTotal.toFixed(2)} />
-                                <StyledTextField label="Service Tax (%)" value={data.sTax || "0"} />
-                                <StyledTextField label="Tax Amount" value={taxAmount.toFixed(2)} />
-                                <StyledTextField
-                                    label="Tax Note"
-                                    value="Tax calculated on product value only"
-                                />
-                                <StyledTextField
-                                    label="Grand Total (Before Rounding)"
-                                    value={grandTotalBeforeRound.toFixed(2)}
-                                />
-                                <StyledTextField label="Round Off" value={roundOff} />
-                                <StyledTextField
-                                    label="Final Grand Total"
-                                    value={roundedGrandTotal.toFixed(2)}
-                                    sx={{
-                                        '& .MuiOutlinedInput-root': {
-                                            backgroundColor: '#e3f2fd',
-                                            '& fieldset': {
-                                                borderColor: '#2196f3',
-                                                borderWidth: 2,
-                                            }
-                                        }
-                                    }}
-                                />
+                            <Grid size={{ xs: 12, sm: 1 }}>
+                                <TextField fullWidth label="Weight" value={item.weight} InputProps={{ readOnly: true }} />
                             </Grid>
-                        </CardContent>
-                    </Card>
+                            <Grid size={{ xs: 12, sm: 2 }}>
+                                <TextField fullWidth label="Price" value={item.price} InputProps={{ readOnly: true }} />
+                            </Grid>
+                            <Grid size={{ xs: 12, sm: 2 }}>
+                                <TextField fullWidth label="Payment Status" value={item.topay} InputProps={{ readOnly: true }} />
+                            </Grid>
+                        </Grid>
+                    ))}
 
-                </Paper>
+                    {/* ---------- Financial Summary ---------- */}
+                    <Grid size={{ xs: 12 }}>
+                        <Typography variant="h6">Financial Summary</Typography>
+                    </Grid>
+
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Freight" value={q.freight} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Amount" value={q.amount} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Total Insurance" value={q.totalInsurance} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Service Tax %" value={q.sTax} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="SGST %" value={q.sgst} InputProps={{ readOnly: true }} />
+                    </Grid>
+                    <Grid size={{ xs: 12, md: 4 }}>
+                        <TextField fullWidth label="Grand Total" value={q.grandTotal} InputProps={{ readOnly: true }} />
+                    </Grid>
+
+                </Grid>
             </Box>
-        </LocalizationProvider>
+        </>
     );
 };
 

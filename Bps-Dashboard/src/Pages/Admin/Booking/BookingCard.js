@@ -58,10 +58,14 @@ const createData = (id, orderby, date, namep, pickup, named, drop, contact) => (
 
 
 function descendingComparator(a, b, orderBy) {
+  if (orderBy === "date") {
+    return new Date(b.date) - new Date(a.date);
+  }
   if (b[orderBy] < a[orderBy]) return -1;
   if (b[orderBy] > a[orderBy]) return 1;
   return 0;
 }
+
 
 function getComparator(order, orderBy) {
   return order === "desc"
@@ -81,6 +85,7 @@ function stableSort(array, comparator) {
 const headCells = [
   { id: "active", label: "Active Delivery", sortable: false },
   { id: "sno", label: "S.No", sortable: false },
+  { id: "biltyNo", label: "Bilty No", sortable: false },
   { id: "orderby", label: "Order By", sortable: true },
   { id: "date", label: "Date", sortable: true },
   { id: "namep", label: "Sender Name", sortable: true },
@@ -124,8 +129,8 @@ const BookingCard = () => {
   const cardColor = "#0155a5";
   const cardLightColor = "#e6f0fa";
   const [activeCard, setActiveCard] = useState(null);
-  const [order, setOrder] = useState("asc");
-  const [orderBy, setOrderBy] = useState("name");
+  const [order, setOrder] = useState("desc");
+  const [orderBy, setOrderBy] = useState("date");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [searchTerm, setSearchTerm] = useState("");
@@ -261,27 +266,37 @@ const BookingCard = () => {
     }
   };
 
-  const filteredRows = (
-    isRevenueCardActive
-      ? (Array.isArray(revenueData)
-        ? revenueData.filter(row =>
-          (row.bookingId && row.bookingId.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.pickup && row.pickup.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.drop && row.drop.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.revenue && row.revenue.toString().includes(searchTerm))
-        )
-        : [])
-      : (Array.isArray(bookingList)
-        ? bookingList.filter(row =>
-          (row.orderby && row.orderby.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.namep && row.namep.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.named && row.named.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.pickup && row.pickup.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.drop && row.drop.toLowerCase().includes(searchTerm.toLowerCase())) ||
-          (row.contact && row.contact.includes(searchTerm))
-        )
-        : [])
-  );
+  const filteredRows = isRevenueCardActive
+    ? (
+      Array.isArray(revenueData)
+        ? revenueData.filter(row => {
+          const q = searchTerm.toLowerCase();
+          return (
+            row.bookingId?.toLowerCase().includes(q) ||
+            row.pickup?.toLowerCase().includes(q) ||
+            row.drop?.toLowerCase().includes(q) ||
+            String(row.revenue || "").includes(q)
+          );
+        })
+        : []
+    )
+    : (
+      Array.isArray(bookingList)
+        ? bookingList.filter(row => {
+          const q = searchTerm.toLowerCase();
+
+          return (
+            row.biltyNo?.toLowerCase().includes(q) ||          // ✅ Bilty No
+            formatDate(row.date)?.toLowerCase().includes(q) ||// ✅ Date
+            row.fromName?.toLowerCase().includes(q) ||        // ✅ Sender Name
+            row.pickup?.toLowerCase().includes(q) ||          // ✅ Pick Up
+            row.toName?.toLowerCase().includes(q) ||          // ✅ Receiver Name
+            row.drop?.toLowerCase().includes(q) ||            // ✅ Drop
+            row.contact?.toString().includes(q)               // ✅ Contact
+          );
+        })
+        : []
+    );
 
   const cardData = [
     {
@@ -519,6 +534,14 @@ const BookingCard = () => {
                           </TableCell>
                         )}
                         <TableCell>{page * rowsPerPage + index + 1}</TableCell>
+                        <TableCell sx={{
+                          maxWidth: 160,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}>
+                          {row.biltyNo || "-"}
+                        </TableCell>
                         <TableCell>{row.orderBy}</TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {formatDate(row.date)}
