@@ -2,30 +2,33 @@ import React from "react";
 import {
   AppBar,
   Box,
-  IconButton,
   Typography,
   Toolbar,
   useMediaQuery,
   useTheme,
   Stack,
+  Divider
 } from "@mui/material";
-import LocalPhoneIcon from "@mui/icons-material/LocalPhone";
+import {
+  LocalPhone as PhoneIcon,
+  LocationOn as LocationIcon,
+  Email as EmailIcon
+} from "@mui/icons-material";
 import logo from "../assets/Logo/logo2.png";
 
 function TopBar({ scrolling }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isSmallMobile = useMediaQuery(theme.breakpoints.down(400));
 
-  if (scrolling) return null; // Hide on scroll
+  if (scrolling) return null;
 
   return (
     <AppBar
       position="static"
       sx={{
         backgroundColor: "#ffffff",
-        transition: "all 0.3s ease-in-out",
-        boxShadow: "0px 2px 8px rgba(0,0,0,0.08)",
-        py: 0.5,
+        boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.05)",
         zIndex: 1201,
       }}
     >
@@ -35,114 +38,131 @@ function TopBar({ scrolling }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          px: { xs: 2, sm: 4, md: 8 },
-          minHeight: "55px",
+          px: { xs: 1.5, sm: 3 },
+          py: { xs: 0.8, sm: 1 },
+          // height: { xs: "50px", sm: "50px" },
+          // minHeight: { xs: "50px !important", sm: "50px !important" },
+          // '&.MuiToolbar-root': {
+          //   minHeight: { xs: "50px !important", sm: "50px !important" },
+          // }
         }}
       >
-        {/* ---- Logo Section ---- */}
+        {/* Logo */}
         <Box
+          component="img"
+          src={logo}
+          alt="Company Logo"
           sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1.5,
+            height: { xs: "30px", sm: "38px" },
+            width: "auto",
+            objectFit: "contain",
           }}
-        >
-          <Box
-            component="img"
-            src={logo}
-            alt="Company Logo"
-            sx={{
-              height: { xs: 45, sm: 60 },
-              width: "auto",
-              objectFit: "contain",
-              cursor: "pointer",
-              filter: "drop-shadow(0px 1px 2px rgba(0,0,0,0.15))",
-              transition: "transform 0.3s ease, filter 0.3s ease",
-              "&:hover": {
-                transform: "scale(1.07)",
-                filter: "drop-shadow(0px 2px 6px rgba(0,0,0,0.2))",
-              },
-            }}
-          />
-        </Box>
+        />
 
-        {/* ---- Phone Info ---- */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            backgroundColor: "#e3f2fd",
-            px: 2,
-            py: 0.6,
-            borderRadius: "25px",
-            boxShadow: "0 2px 6px rgba(21,101,192,0.2)",
-            "&:hover": {
-              backgroundColor: "#d0e4fb",
-            },
-          }}
+        {/* Contact Info - Super Mobile Friendly */}
+        <Stack
+          direction="row"
+          spacing={{ xs: 0.8, sm: 1.5 }}
+          alignItems="center"
+          divider={
+            <Divider
+              orientation="vertical"
+              flexItem
+              sx={{
+                height: "20px",
+                alignSelf: "center",
+                backgroundColor: "#e0e0e0"
+              }}
+            />
+          }
         >
-          <IconButton sx={{ color: "#1565c0", p: 0.5 }}>
-            <LocalPhoneIcon fontSize="small" />
-          </IconButton>
 
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: { xs: "row", sm: "column" },
-              lineHeight: 1,
-            }}
-          >
-            <Stack direction={'row'} spacing={5}>
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "#333",
-                    fontWeight: 600,
-                    display: { xs: "none", sm: "block" },
-                  }}
-                >
-                  Delhi Office (Headquarter)
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "#1565c0",
-                    fontWeight: 700,
-                    fontSize: "0.85rem",
-                    ml: { xs: 0.5, sm: 0 },
-                  }}
-                >
-                  +91-7779993453
-                </Typography>
-              </Box>
-              <Box>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "#333",
-                    fontWeight: 600,
-                    display: { xs: "none", sm: "block" },
-                  }}
-                >
-                  Mumbai Office
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: "#1565c0",
-                    fontWeight: 700,
-                    fontSize: "0.85rem",
-                    ml: { xs: 0.5, sm: 0 },
-                  }}
-                >
-                  +91-7779993454
-                </Typography>
-              </Box>
-            </Stack>
+          {/* Delhi - Mobile Compact */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <LocationIcon sx={{
+              color: "#1565c0",
+              fontSize: { xs: "13px", sm: "16px" }
+            }} />
+            <Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#333",
+                  fontWeight: 600,
+                  fontSize: { xs: "0.68rem", sm: "0.75rem" },
+                  lineHeight: 1.1,
+                  display: "block",
+                }}
+              >
+                {isSmallMobile ? "DEL" : "Delhi"} | +91-7779993453
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#1565c0",
+                  fontWeight: 500,
+                  fontSize: { xs: "0.6rem", sm: "0.7rem" },
+                  lineHeight: 1,
+                  display: "block",
+                }}
+              >
+                {isSmallMobile ? "HQ" : "Head Quarter"}
+              </Typography>
+            </Box>
           </Box>
-        </Box>
+
+          {/* Mumbai - Mobile Compact */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <LocationIcon sx={{
+              color: "#2e7d32",
+              fontSize: { xs: "13px", sm: "16px" }
+            }} />
+            <Box>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#333",
+                  fontWeight: 600,
+                  fontSize: { xs: "0.68rem", sm: "0.75rem" },
+                  lineHeight: 1.1,
+                  display: "block",
+                }}
+              >
+                {isSmallMobile ? "MUM" : "Mumbai"} | +91-7779993454
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#2e7d32",
+                  fontWeight: 500,
+                  fontSize: { xs: "0.6rem", sm: "0.7rem" },
+                  lineHeight: 1,
+                  display: "block",
+                }}
+              >
+                Office
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Email - Hide on very small mobile */}
+          {!isSmallMobile && !isMobile && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <EmailIcon sx={{ color: "#d32f2f", fontSize: { xs: "13px", sm: "16px" } }} />
+              <Typography
+                variant="caption"
+                sx={{
+                  color: "#333",
+                  fontWeight: 600,
+                  fontSize: { xs: "0.68rem", sm: "0.75rem" },
+                  whiteSpace: "nowrap",
+                }}
+              >
+                info@bharatparcel.org
+              </Typography>
+            </Box>
+          )}
+        </Stack>
       </Toolbar>
     </AppBar>
   );

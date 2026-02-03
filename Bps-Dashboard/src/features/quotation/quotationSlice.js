@@ -191,6 +191,36 @@ export const fetchReceiptPreview = createAsyncThunk(
   }
 );
 
+export const uploadQuotationPdf = createAsyncThunk(
+  "quotation/uploadPdf",
+  async ({ bookingId, file }, thunkApi) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await axios.post(
+        `${QUOTATION_API}/upload-pdf/${bookingId}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      return {
+        bookingId,
+        pdfUrl: res.data.data.pdfUrl
+      };
+    } catch (err) {
+      return thunkApi.rejectWithValue(
+        err.response?.data?.message || "PDF upload failed"
+      );
+    }
+  }
+);
+
 
 const initialState = {
   list: [],
@@ -205,6 +235,8 @@ const initialState = {
   viewedBooking: null,
   status: 'idle',
   error: null,
+  uploadedPdfUrl: null,
+  pdfUploadLoading: false,
   form: {
     firstName: "",
     lastName: "",
@@ -252,7 +284,8 @@ const quotationSlice = createSlice({
       state.form = initialState.form;
     },
     addBooking: (state, action) => {
-      state.list.push(action.payload);
+      const safeList = Array.isArray(state.list) ? state.list : [];
+      state.list = [...safeList, action.payload];
     },
     setBooking: (state, action) => {
       state.list = action.payload;
@@ -272,7 +305,9 @@ const quotationSlice = createSlice({
       .addCase(createBooking.fulfilled, (state, action) => {
         state.status = 'succeeded';
         state.error = null;
-        state.list.push(action.payload);
+
+        const safeList = Array.isArray(state.list) ? state.list : [];
+        state.list = [...safeList, action.payload];
       })
       .addCase(createBooking.rejected, (state, action) => {
         state.loading = false;
@@ -406,6 +441,39 @@ const quotationSlice = createSlice({
 
       .addCase(fetchReceiptPreview.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+
+      // PDF Upload
+      .addCase(uploadQuotationPdf.pending, (state) => {
+        state.pdfUploadLoading = true;
+        state.error = null;
+      })
+
+      .addCase(uploadQuotationPdf.fulfilled, (state, action) => {
+        state.pdfUploadLoading = false;
+        state.uploadedPdfUrl = action.payload.pdfUrl;
+
+        // 🔁 Update booking in list (if exists)
+        const index = state.list.findIndex(
+          q => q.bookingId === action.payload.bookingId
+        );
+
+        if (index !== -1) {
+          state.list[index].quotationPdf = action.payload.pdfUrl;
+        }
+
+        // 🔁 Update viewed booking also
+        if (
+          state.viewedBooking &&
+          state.viewedBooking.bookingId === action.payload.bookingId
+        ) {
+          state.viewedBooking.quotationPdf = action.payload.pdfUrl;
+        }
+      })
+
+      .addCase(uploadQuotationPdf.rejected, (state, action) => {
+        state.pdfUploadLoading = false;
         state.error = action.payload;
       })
 

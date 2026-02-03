@@ -2,6 +2,7 @@ import { User } from "../model/user.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { uploadToCloudinary } from "../utils/uploadPdfToCloudinary.js";
 import fs from "fs/promises";
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
@@ -16,11 +17,25 @@ export const registerUser = asyncHandler(async (req, res) => {
     let userData = { ...req.body };
 
     if (req.files) {
+
+      // ID Proof
       if (req.files['idProofPhoto']) {
-        userData.idProofPhoto = req.files['idProofPhoto'][0].path;
+        const idProofUpload = await uploadToCloudinary(
+          req.files['idProofPhoto'][0].path,
+          "admins/idProof"
+        );
+
+        userData.idProofPhoto = idProofUpload.secure_url;   // ✅ Cloudinary URL
       }
+
+      // Admin Profile Photo
       if (req.files['adminProfilePhoto']) {
-        userData.adminProfilePhoto = req.files['adminProfilePhoto'][0].path;
+        const profileUpload = await uploadToCloudinary(
+          req.files['adminProfilePhoto'][0].path,
+          "admins/profile"
+        );
+
+        userData.adminProfilePhoto = profileUpload.secure_url;  // ✅ Cloudinary URL
       }
     }
 
@@ -142,8 +157,30 @@ export const logoutUser = asyncHandler(async (req, res) => {
 
 //User profile
 export const getUserProfile = asyncHandler(async (req, res) => {
-  res.status(200).json(new ApiResponse(200, "User fetched successfully", req.user));
+  const user = await User.findById(req.user._id).select("-password");
+
+  res.status(200).json(
+    new ApiResponse(200, "User fetched successfully", {
+      adminId: user.adminId,
+      role: user.role,
+      firstName: user.firstName,
+      middleName: user.middleName,
+      lastName: user.lastName,
+      fullName: `${user.firstName} ${user.middleName ?? ""} ${user.lastName}`.trim(),
+      emailId: user.emailId,
+      contactNumber: user.contactNumber,
+      adminProfilePhoto: user.adminProfilePhoto,   // ✅ Cloudinary URL
+      idProofPhoto: user.idProofPhoto,             // ✅ Cloudinary URL
+      startStation: user.startStation,
+      stationCode: user.stationCode,
+      address: user.address,
+      city: user.city,
+      state: user.state,
+      pincode: user.pincode
+    })
+  );
 });
+
 
 // Get all users for admin 
 export const getAllUsersForAdmin = asyncHandler(async (req, res) => {
@@ -196,28 +233,21 @@ export const updateUser = asyncHandler(async (req, res) => {
 
     // Handle uploaded files
     if (req.files) {
-      // ID Proof Photo
+
       if (req.files["idProofPhoto"]) {
-        if (existingUser.idProofPhoto) {
-          try {
-            await fs.unlink(existingUser.idProofPhoto);
-          } catch (unlinkError) {
-            console.error("Error deleting old idProofPhoto:", unlinkError);
-          }
-        }
-        updatedData.idProofPhoto = req.files["idProofPhoto"][0].path;
+        const idProofUpload = await uploadToCloudinary(
+          req.files["idProofPhoto"][0].path,
+          "admins/idProof"
+        );
+        updatedData.idProofPhoto = idProofUpload.secure_url;
       }
 
-      // Admin Profile Photo
       if (req.files["adminProfilePhoto"]) {
-        if (existingUser.adminProfilePhoto) {
-          try {
-            await fs.unlink(existingUser.adminProfilePhoto);
-          } catch (unlinkError) {
-            console.error("Error deleting old adminProfilePhoto:", unlinkError);
-          }
-        }
-        updatedData.adminProfilePhoto = req.files["adminProfilePhoto"][0].path;
+        const profileUpload = await uploadToCloudinary(
+          req.files["adminProfilePhoto"][0].path,
+          "admins/profile"
+        );
+        updatedData.adminProfilePhoto = profileUpload.secure_url;
       }
     }
 
@@ -262,87 +292,101 @@ export const countDeactivatedSupervisors = asyncHandler(async (req, res) => {
 
 // Get list of all supervisors
 export const getSupervisorsList = asyncHandler(async (req, res) => {
-  try {
-    const supervisors = await User.find({ role: 'supervisor', isActive: true, isBlacklisted: false, isDeactivated: false }).select("adminId firstName lastName contactNumber");
+  const supervisors = await User.find({
+    role: 'supervisor',
+    isActive: true,
+    isBlacklisted: false,
+    isDeactivated: false
+  }).select(`
+    adminId
+    firstName
+    middleName
+    lastName
+    emailId
+    contactNumber
+    startStation
+    stationCode
+    adminProfilePhoto
+    role
+    isActive
+    isBlacklisted
+    isDeactivated
+  `);
 
-    const formattedSupervisors = supervisors.map((supervisor, index) => ({
-      sNo: index + 1,
-      adminId: supervisor.adminId,
-      name: `${supervisor.firstName} ${supervisor.lastName}`,
-      contact: supervisor.contactNumber,
-    }));
-
-    res.status(200).json(new ApiResponse(200, "Supervisors fetched successfully", formattedSupervisors));
-  } catch (error) {
-    throw new ApiError(500, "Error fetching supervisors", error.message);
-  }
+  res.status(200).json(
+    new ApiResponse(200, "Supervisors fetched successfully", supervisors)
+  );
 });
 
 // Get list of all admins
 export const getAdminsList = asyncHandler(async (req, res) => {
-  try {
-    const admins = await User.find({ role: 'admin' }).select("adminId firstName lastName contactNumber");
+  const admins = await User.find({ role: 'admin' }).select(`
+    adminId
+    firstName
+    middleName
+    lastName
+    emailId
+    contactNumber
+    startStation
+    stationCode
+    adminProfilePhoto
+    role
+    isActive
+  `);
 
-    const formattedAdmins = admins.map((admin, index) => {
-      console.log("Fetched Admin:", {
-        index: index + 1,
-        adminId: admin.adminId,
-        name: `${admin.firstName} ${admin.lastName}`,
-        contact: admin.contactNumber,
-      });
-
-      return {
-        "S.No": index + 1,
-        adminId: admin.adminId,
-        name: `${admin.firstName} ${admin.lastName}`,
-        contact: admin.contactNumber,
-      };
-    });
-
-    res.status(200).json(new ApiResponse(200, "Admins fetched successfully", formattedAdmins));
-  } catch (error) {
-    throw new ApiError(500, "Error fetching admins", error.message);
-  }
+  res.status(200).json(
+    new ApiResponse(200, "Admins fetched successfully", admins)
+  );
 });
 
 // Get list of deactivated supervisors
 export const getDeactivatedSupervisorsList = asyncHandler(async (req, res) => {
-  try {
-    const deactivatedSupervisors = await User.find({ role: 'supervisor', isActive: false, isBlacklisted: false, isDeactivated: true })
-      .select("adminId firstName lastName contactNumber");
+  const supervisors = await User.find({
+    role: 'supervisor',
+    isActive: false,
+    isBlacklisted: false,
+    isDeactivated: true
+  }).select(`
+    adminId
+    firstName
+    middleName
+    lastName
+    emailId
+    contactNumber
+    startStation
+    stationCode
+    adminProfilePhoto
+    role
+    isDeactivated
+  `);
 
-    const formattedDeactivatedSupervisors = deactivatedSupervisors.map((supervisor, index) => ({
-      sNo: index + 1,
-      adminId: supervisor.adminId,
-      name: `${supervisor.firstName} ${supervisor.lastName}`,
-      contact: supervisor.contactNumber,
-      userId: supervisor._id,
-    }));
-
-    res.status(200).json(new ApiResponse(200, "Deactivated supervisors fetched successfully", formattedDeactivatedSupervisors));
-  } catch (error) {
-    throw new ApiError(500, "Error fetching deactivated supervisors", error.message);
-  }
+  res.status(200).json(
+    new ApiResponse(200, "Deactivated supervisors fetched successfully", supervisors)
+  );
 });
 
 // Get list of blacklisted supervisors
 export const getBlacklistedSupervisorsList = asyncHandler(async (req, res) => {
-  try {
-    const blacklistedSupervisors = await User.find({ role: 'supervisor', isBlacklisted: true })
-      .select("adminId firstName lastName contactNumber");
+  const supervisors = await User.find({
+    role: 'supervisor',
+    isBlacklisted: true
+  }).select(`
+    adminId
+    firstName
+    middleName
+    lastName
+    emailId
+    contactNumber
+    startStation
+    stationCode
+    adminProfilePhoto
+    role
+    isBlacklisted
+  `);
 
-    const formattedBlacklistedSupervisors = blacklistedSupervisors.map((supervisor, index) => ({
-      sNo: index + 1,
-      adminId: supervisor.adminId,
-      name: `${supervisor.firstName} ${supervisor.lastName}`,
-      contact: supervisor.contactNumber,
-
-    }));
-
-    res.status(200).json(new ApiResponse(200, "Blacklisted supervisors fetched successfully", formattedBlacklistedSupervisors));
-  } catch (error) {
-    throw new ApiError(500, "Error fetching blacklisted supervisors", error.message);
-  }
+  res.status(200).json(
+    new ApiResponse(200, "Blacklisted supervisors fetched successfully", supervisors)
+  );
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {

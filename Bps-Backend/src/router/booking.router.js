@@ -29,9 +29,10 @@ import {
   listDeletedBookings,
   restoreBooking,
   getIncomingBookings,
-  previewBookingReceiptNo
+  previewBookingReceiptNo,
+  uploadBookingPdf
 } from '../controller/booking.controller.js';
-
+import { upload } from "../middleware/multer.middleware.js";
 import { parseFormData } from "../middleware/multerParser.middleware.js";
 import { verifyJwt } from '../middleware/auth.middleware.js'
 const router = express.Router();
@@ -69,6 +70,11 @@ router.post('/overallBookingSummary', overallBookingSummary);
 router.post('/booking-summary', verifyJwt, getBookingSummaryByDate);
 router.post('/ca-report', getCADetailsSummary);
 router.post('/invoice', generateInvoiceByCustomer);
+router.post(
+  "/:bookingId/upload-pdf",
+  upload.single("file"),      // 🔥 multer middleware here
+  uploadBookingPdf            // 🔥 controller
+);
 
 
 export default router;

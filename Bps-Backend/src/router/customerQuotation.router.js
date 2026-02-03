@@ -20,10 +20,11 @@ import {
   getBookingSummaryByDate,
   getIncomingQuotations,
   previewReceiptNo,
-  sendQuotationWhatsapp
-
+  sendQuotationWhatsapp,
+  uploadQuotationPdf
 } from "../controller/customerQuotation.controller.js";
 import { parseFormData } from "../middleware/multerParser.middleware.js";
+import { upload } from "../middleware/multer.middleware.js";
 import { verifyJwt } from '../middleware/auth.middleware.js'
 const router = express.Router();
 
@@ -73,4 +74,10 @@ router.delete("/:bookingId", deleteQuotation);
 router.get("/search/:bookingId", searchQuotationByBookingId);
 // Route to incoming quotation
 router.post("/qincoming", verifyJwt, getIncomingQuotations);
+router.post(
+  "/upload-pdf/:bookingId",
+  upload.single("file"),
+  uploadQuotationPdf
+);
+
 export default router;

@@ -182,7 +182,8 @@ const customerSlice = createSlice({
       state.form = initialState.form;
     },
     addCustomers: (state, action) => {
-      state.list.push(action.payload);
+      const safeList = Array.isArray(state.list) ? state.list : [];
+      state.list = [...safeList, action.payload];
     },
     setCustomers: (state, action) => {
       state.list = action.payload;

@@ -95,15 +95,19 @@ const ViewBookingByDate = () => {
                         0
                     ),
 
-                    totalPaid: bookingsData.reduce(
-                        (sum, b) => sum + (b.paid || 0),
-                        0
-                    ),
+                    totalPaid: bookingsData.reduce((sum, b) => {
+                        const item = b.items?.[0];
+                        return item?.toPay === "paid"
+                            ? sum + Number(b.grandTotal || 0)
+                            : sum;
+                    }, 0),
 
-                    totalToPay: bookingsData.reduce(
-                        (sum, b) => sum + (b.toPay || 0),
-                        0
-                    ),
+                    totalToPay: bookingsData.reduce((sum, b) => {
+                        const item = b.items?.[0];
+                        return item?.toPay === "toPay"
+                            ? sum + Number(b.grandTotal || 0)
+                            : sum;
+                    }, 0),
 
                     totalInsVpp: bookingsData.reduce(
                         (sum, b) => sum + Number(b.ins_vpp || 0),
@@ -111,9 +115,15 @@ const ViewBookingByDate = () => {
                     ),
 
                     paymentBreakdown: {
-                        fullyPaid: bookingsData.filter(b => b.paymentStatus === "Paid").length,
-                        partiallyPaid: bookingsData.filter(b => b.paymentStatus === "Partial").length,
-                        unpaid: bookingsData.filter(b => b.paymentStatus === "Unpaid").length
+                        fullyPaid: bookingsData.filter(
+                            b => b.items?.[0]?.toPay === "paid"
+                        ).length,
+
+                        unpaid: bookingsData.filter(
+                            b => b.items?.[0]?.toPay === "toPay"
+                        ).length,
+
+                        partiallyPaid: 0
                     }
                 };
                 setSummary(calculatedSummary);
@@ -246,10 +256,11 @@ const ViewBookingByDate = () => {
         // ===== TABLE BODY =====
         const body = filteredBookings.map((b, index) => {
             const item = b.items?.[0] || {};
-            const insVpp = getInsVppAmount(b);
-            const paidAmount = b.paid || 0;
-            const toPayAmount = b.toPay || 0;
+            const payType = item.toPay;
             const totalAmount = b.grandTotal || 0;
+            const paidAmount = payType === "paid" ? totalAmount : "";
+            const toPayAmount = payType === "toPay" ? totalAmount : "";
+            const insVpp = getInsVppAmount(b);
             const gst =
                 (b.cgst || 0) +
                 (b.sgst || 0) +
@@ -377,10 +388,11 @@ const ViewBookingByDate = () => {
     const downloadBookingExcel = () => {
         const data = filteredBookings.map((b, index) => {
             const item = b.items?.[0] || {};
-            const insVpp = getInsVppAmount(b);
-            const paidAmount = b.paid || 0;
-            const toPayAmount = b.toPay || 0;
+            const payType = item.toPay;
             const totalAmount = b.grandTotal || 0;
+            const paidAmount = payType === "paid" ? totalAmount : "";
+            const toPayAmount = payType === "toPay" ? totalAmount : "";
+            const insVpp = getInsVppAmount(b);
             const gst =
                 (b.cgst || 0) +
                 (b.sgst || 0) +
@@ -680,6 +692,10 @@ const ViewBookingByDate = () => {
                                 <TableBody>
                                     {paginatedBookings.map((booking, index) => {
                                         const item = booking.items?.[0] || {};
+                                        const payType = (item.toPay || "").toLowerCase();
+                                        const grandTotal = booking.grandTotal || 0;
+                                        const paidValue = payType === "paid" ? grandTotal : "-";
+                                        const toPayValue = payType === "topay" ? grandTotal : "-";
                                         const amount = item.amount || 0;
                                         const insVpp = getInsVppAmount(booking);
                                         const bilty = 20;
@@ -687,8 +703,6 @@ const ViewBookingByDate = () => {
                                             (booking.cgst || 0) +
                                             (booking.sgst || 0) +
                                             (booking.igst || 0);
-                                        const grandTotal = booking.grandTotal || 0;
-                                        const payType = (item.toPay || "").toLowerCase();
 
                                         return (
                                             <TableRow
@@ -777,11 +791,11 @@ const ViewBookingByDate = () => {
                                                 </TableCell>
 
                                                 <TableCell sx={oneLineCell}>
-                                                    ₹{booking.paid || 0}
+                                                    {paidValue === "-" ? "-" : `₹${paidValue}`}
                                                 </TableCell>
 
                                                 <TableCell sx={oneLineCell}>
-                                                    ₹{booking.toPay || 0}
+                                                    {toPayValue === "-" ? "-" : `₹${toPayValue}`}
                                                 </TableCell>
 
                                             </TableRow>

@@ -345,6 +345,38 @@ export const previewBookingReceiptNo = createAsyncThunk(
   }
 );
 
+// 🔥 Upload Booking PDF
+export const uploadBookingPdf = createAsyncThunk(
+  "booking/uploadPdf",
+  async ({ bookingId, file }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem("authToken");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await axios.post(
+        `${BASE_URL}/${bookingId}/upload-pdf`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      return {
+        bookingId,
+        pdfUrl: res.data.data.pdfUrl,
+      };
+    } catch (err) {
+      return rejectWithValue(
+        err.response?.data?.message || "PDF upload failed"
+      );
+    }
+  }
+);
 
 const initialState = {
   list: [],
@@ -357,6 +389,10 @@ const initialState = {
   activeDeliveriesCount: 0,
   cancelledDeliveriesCount: 0,
   totalRevenue: 0,
+  uploadStatus: "idle",      // idle | loading | succeeded | failed
+  uploadError: null,
+  previewPdfUrl: null,
+  previewOpen: false,
   data: [],
   count: 0,
   loading: false,
@@ -443,7 +479,15 @@ const bookingSlice = createSlice({
     },
     clearViewedBooking: (state) => {
       state.viewedBooking = null;
-    }
+    },
+    setPreviewPdf: (state, action) => {
+      state.previewPdfUrl = action.payload;
+      state.previewOpen = true;
+    },
+    closePreviewPdf: (state) => {
+      state.previewPdfUrl = null;
+      state.previewOpen = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -455,15 +499,15 @@ const bookingSlice = createSlice({
         state.loading = true; // Keep this for backward compatibility
       })
       .addCase(createBooking.fulfilled, (state, action) => {
-        state.createStatus = 'succeeded'; // Change this
-        state.status = 'succeeded'; // Keep existing
+        state.createStatus = 'succeeded';
+        state.status = 'succeeded';
         state.error = null;
-        if (Array.isArray(state.list)) {
-          state.list = [...state.list, action.payload];
-        } else {
-          state.list = [action.payload];
-        }
-        state.loading = false; // Keep existing
+        state.loading = false;
+
+        // ✅ SAFE GUARDED UPDATE
+        const safeList = Array.isArray(state.list) ? state.list : [];
+        state.list = [...safeList, action.payload];
+
         state.receiptPreview = "";
         state.receiptPreviewStatus = "idle";
       })
@@ -517,8 +561,11 @@ const bookingSlice = createSlice({
         state.loading = false;
         state.viewedBooking = action.payload;
         state.form = {
-          ...state.form,
-          ...action.payload
+          ...initialState.form,
+          ...action.payload,
+          items: Array.isArray(action.payload.items)
+            ? action.payload.items
+            : initialState.form.items
         };
       })
       .addCase(viewBookingById.rejected, (state) => {
@@ -770,10 +817,46 @@ const bookingSlice = createSlice({
       .addCase(previewBookingReceiptNo.rejected, (state, action) => {
         state.receiptPreviewStatus = "failed";
         state.receiptPreviewError = action.payload;
+      })
+      // ==========================
+      // 📤 Upload Booking PDF
+      // ==========================
+      .addCase(uploadBookingPdf.pending, (state) => {
+        state.uploadStatus = "loading";
+        state.uploadError = null;
+      })
+
+      .addCase(uploadBookingPdf.fulfilled, (state, action) => {
+        state.uploadStatus = "succeeded";
+
+        const { bookingId, pdfUrl } = action.payload;
+
+        // 🔄 update list
+        if (Array.isArray(state.list)) {
+          const index = state.list.findIndex(
+            (b) => b.bookingId === bookingId
+          );
+          if (index !== -1) {
+            state.list[index].quotationPdf = pdfUrl; // 🔥 booking pdf
+          }
+        }
+
+        // 🔄 update viewed booking
+        if (
+          state.viewedBooking &&
+          state.viewedBooking.bookingId === bookingId
+        ) {
+          state.viewedBooking.quotationPdf = pdfUrl;
+        }
+      })
+
+      .addCase(uploadBookingPdf.rejected, (state, action) => {
+        state.uploadStatus = "failed";
+        state.uploadError = action.payload;
       });
 
   }
 });
 
-export const { setFormField, resetForm, addBooking, setBooking, clearViewedBooking } = bookingSlice.actions;
+export const { setFormField, resetForm, addBooking, setBooking, clearViewedBooking, setPreviewPdf, closePreviewPdf } = bookingSlice.actions;
 export default bookingSlice.reducer;

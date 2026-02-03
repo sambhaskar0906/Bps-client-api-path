@@ -40,11 +40,23 @@ import {
 } from "@mui/icons-material";
 import AddIcon from "@mui/icons-material/Add";
 import { useDispatch, useSelector } from 'react-redux';
-import { bookingRequestCount, activeBookingCount, cancelledBookingCount, fetchBookingsByType, cancelBooking, deleteBooking, revenueList, sendWhatsAppMsg, sendEmail, viewBookingById, clearViewedBooking } from '../../../features/booking/bookingSlice'
+import {
+  bookingRequestCount, activeBookingCount, cancelledBookingCount, fetchBookingsByType, cancelBooking, deleteBooking, revenueList, sendWhatsAppMsg, sendEmail, viewBookingById, clearViewedBooking, uploadBookingPdf,
+  setPreviewPdf,
+  closePreviewPdf
+} from '../../../features/booking/bookingSlice'
 import SendIcon from '@mui/icons-material/Send';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import SlipModal from "../../../Components/SlipModal";
 import { finalizeDelivery } from '../../../features/delivery/deliverySlice';
+import UploadIcon from "@mui/icons-material/Upload";
+import PictureAsPdfIcon from "@mui/icons-material/PictureAsPdf";
+import ImageIcon from "@mui/icons-material/Image";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import {
+  sendBookingWhatsappText
+} from "../../../features/whatsapp/whatsappSlice";
+
 const createData = (id, orderby, date, namep, pickup, named, drop, contact) => ({
   id,
   orderby,
@@ -83,7 +95,7 @@ function stableSort(array, comparator) {
 }
 
 const headCells = [
-  { id: "active", label: "Active Delivery", sortable: false },
+  { id: "active", label: "Finalize", sortable: false },
   { id: "sno", label: "S.No", sortable: false },
   { id: "biltyNo", label: "Bilty No", sortable: false },
   { id: "orderby", label: "Order By", sortable: true },
@@ -139,9 +151,14 @@ const BookingCard = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [bookingToDelete, setBookingToDelete] = useState(null);
   const dispatch = useDispatch();
-  const { list: bookingList, revenueList: revenueData = [], requestCount, activeDeliveriesCount, cancelledDeliveriesCount, totalRevenue } = useSelector(state => state.bookings);
+  const { list: bookingList, revenueList: revenueData = [], requestCount, activeDeliveriesCount, cancelledDeliveriesCount, totalRevenue, previewOpen, previewPdfUrl, uploadStatus } = useSelector(state => state.bookings);
   const openSlip = useSelector((state) => state.bookings.viewedBooking !== null);
   const booking = useSelector((state) => state.bookings.viewedBooking);
+  const fileInputRef = React.useRef(null);
+  const [openUploadModal, setOpenUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
   useEffect(() => {
     if (bookingList && Array.isArray(bookingList)) {
       setBookings(bookingList);
@@ -180,6 +197,19 @@ const BookingCard = () => {
   const isRevenueCardActive = activeCard === 4;
 
   const displayHeadCells = isRevenueCardActive ? revenueHeadCells : headCells;
+
+  const handleBookingWhatsappText = (bookingId) => {
+    dispatch(sendBookingWhatsappText(bookingId))
+      .unwrap()
+      .then(() => {
+        alert("✅ Booking details sent on WhatsApp");
+      })
+      .catch((err) => {
+        alert(
+          err?.message || "❌ Failed to send WhatsApp message"
+        );
+      });
+  };
 
   const handleCardClick = (type, cardId) => {
     setActiveCard(cardId);
@@ -248,6 +278,53 @@ const BookingCard = () => {
   const handleCloseSlip = () => {
     dispatch(clearViewedBooking());
   };
+
+  // 📤 click upload icon
+  const handleUploadClick = (bookingId) => {
+    setSelectedBookingId(bookingId);
+    fileInputRef.current.click();
+  };
+
+  // 📁 file select
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setSelectedFile(file);
+
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+
+    setOpenUploadModal(true);
+  };
+
+  // ❌ cancel modal
+  const handleUploadCancel = () => {
+    setOpenUploadModal(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setSelectedBookingId(null);
+  };
+
+  // ✅ final upload
+  const handleFinalUpload = () => {
+    if (!selectedFile || !selectedBookingId) return;
+
+    dispatch(uploadBookingPdf({
+      bookingId: selectedBookingId,
+      file: selectedFile
+    }))
+      .unwrap()
+      .then(() => {
+        handleUploadCancel(); // close modal
+      });
+  };
+
+  // 👁 preview existing pdf
+  const handlePreview = (url) => {
+    dispatch(setPreviewPdf(url));
+  };
+
   const handleActiveChange = (orderId, isActive) => {
     if (isActive) {
       if (window.confirm("Are you sure you want to finalize this delivery?")) {
@@ -340,6 +417,13 @@ const BookingCard = () => {
   console.log("data", bookingList);
   return (
     <Box sx={{ p: 2 }}>
+      <input
+        type="file"
+        hidden
+        ref={fileInputRef}
+        accept="application/pdf,image/*"
+        onChange={handleFileSelect}
+      />
       <Box
         sx={{
           display: "flex",
@@ -595,12 +679,43 @@ const BookingCard = () => {
                             </IconButton>
                             <IconButton
                               size="small"
+                              sx={{ color: "#25D366" }} // WhatsApp green
+                              title="Send WhatsApp (Text)"
+                              onClick={() => handleBookingWhatsappText(row.bookingId)}
+                            >
+                              <WhatsAppIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
                               color="secondary"
                               onClick={() => handleSlipClick(row.bookingId)}
                               title="Slip"
                             >
                               <ReceiptIcon fontSize="small" />
                             </IconButton>
+                            {/* 📤 Upload Icon (ONLY ACTIVE) */}
+                            {selectedList === "active" && (
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => handleUploadClick(row.bookingId)}
+                                title="Upload PDF"
+                              >
+                                <UploadIcon fontSize="small" />
+                              </IconButton>
+                            )}
+
+                            {/* 👁 Preview Icon (ONLY IF PDF EXISTS + ACTIVE) */}
+                            {selectedList === "active" && row.quotationPdf && (
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() => handlePreview(row.quotationPdf)}
+                                title="Preview PDF"
+                              >
+                                <PictureAsPdfIcon fontSize="small" />
+                              </IconButton>
+                            )}
                           </Box>
                           <SlipModal
                             open={openSlip}
@@ -644,6 +759,65 @@ const BookingCard = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <Dialog open={openUploadModal} onClose={handleUploadCancel} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ fontWeight: 600 }}>
+          Upload Booking File
+        </DialogTitle>
+
+        <DialogContent sx={{ height: "75vh" }}>
+          {previewUrl && (
+            <>
+              {selectedFile?.type === "application/pdf" ? (
+                <iframe
+                  src={previewUrl}
+                  title="PDF Preview"
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              ) : (
+                <Box sx={{ textAlign: "center" }}>
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    style={{ maxWidth: "100%", maxHeight: "70vh", borderRadius: 8 }}
+                  />
+                </Box>
+              )}
+            </>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2 }}>
+          <Button variant="outlined" color="error" onClick={handleUploadCancel}>
+            Cancel
+          </Button>
+
+          <Button
+            variant="contained"
+            onClick={handleFinalUpload}
+            disabled={uploadStatus === "loading"}
+            startIcon={<UploadIcon />}
+          >
+            {uploadStatus === "loading" ? "Uploading..." : "Upload"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={previewOpen} onClose={() => dispatch(closePreviewPdf())} maxWidth="md" fullWidth PaperProps={{
+        sx: {
+          height: "90vh",
+          borderRadius: 3
+        }
+      }}>
+        <DialogTitle sx={{ fontWeight: 600 }}>Booking PDF Preview</DialogTitle>
+
+        <DialogContent sx={{ p: 0 }}>
+          <iframe
+            src={previewPdfUrl}
+            style={{ width: "80%", height: "80%", border: "none" }}
+            title="PDF Preview"
+          />
+        </DialogContent>
+      </Dialog>
+
     </Box>
   );
 };

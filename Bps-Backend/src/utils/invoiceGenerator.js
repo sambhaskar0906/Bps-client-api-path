@@ -1,11 +1,31 @@
-// ===========================================
-// 📦 TAX INVOICE Generator (FINAL - NO OVERLAP)
-// ===========================================
-
 import PDFDocument from "pdfkit";
 
 // =========================
-// 🔹 Utility Functions
+// 🔹 Station Master (Fallback Config)
+// =========================
+const STATION_MASTER = {
+    DELHI: {
+        name: "Bharat Parcel Services Pvt. Ltd.",
+        address: "332, Kucha Ghasi Ram, Chandni Chowk, Fatehpuri, Delhi - 110006",
+        phone: "011-23955385, 23830010",
+        gst: "07AAECB6506F1ZY",
+        pan: "AAECB6506F",
+        sac: "9968",
+        state: "Delhi"
+    },
+    MUMBAI: {
+        name: "Bharat Parcel Services Pvt. Ltd.",
+        address: "1 Malharrao Wadi, Ground Floor, Kalbadevi Rd., Mumbai - 400002",
+        phone: "022-22411975, 22422812",
+        gst: "27AAECB6506F1ZY",
+        pan: "AAECB6506F",
+        sac: "9968",
+        state: "Maharashtra"
+    }
+};
+
+// =========================
+// 🔹 Utils
 // =========================
 const formatDate = (date) => {
     if (!date) return "";
@@ -15,9 +35,8 @@ const formatDate = (date) => {
 
 const convertNumberToWords = (num) => {
     if (!num) return "";
-    const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-        "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
-        "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+    const a = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+        "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
     const b = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
 
     const inWords = (n) => {
@@ -28,86 +47,67 @@ const convertNumberToWords = (num) => {
         if (n < 10000000) return inWords(Math.floor(n / 100000)) + " Lakh " + inWords(n % 100000);
         return "";
     };
-
     return inWords(Math.floor(num));
 };
 
 // =========================
-// 🔹 Calculate Dynamic Row Height
+// 🔹 Station Resolver
 // =========================
-const calculateRowHeight = (doc, rowData, widths) => {
-    let height = 20;
-    rowData.forEach((t, i) => {
-        const h = doc.heightOfString(String(t), { width: widths[i] - 6 });
-        height = Math.max(height, h + 10);
-    });
-    return height;
+const resolveStationHeader = (booking) => {
+    const apiStation = booking?.startStation;
+
+    if (apiStation?.stationName && apiStation?.address && apiStation?.gst) {
+        return {
+            name: "Bharat Parcel Services Pvt. Ltd.",
+            address: `${apiStation.address}, ${apiStation.city} - ${apiStation.pincode}`,
+            phone: apiStation.contact,
+            gst: apiStation.gst,
+            pan: "AAECB6506F",
+            sac: "9968",
+            state: apiStation.state
+        };
+    }
+
+    const stationName = apiStation?.stationName?.toUpperCase();
+    if (stationName && STATION_MASTER[stationName]) {
+        return STATION_MASTER[stationName];
+    }
+
+    return STATION_MASTER.DELHI; // default fallback
 };
 
 // =========================
-// 🧾 Create Table Row
+// 🔹 Table Row Height Calc
 // =========================
-function createTableRow(doc, y, headers, booking, index, cb) {
-    const amount = Number(booking.amount || booking.billTotal || 0);
-    const cgst = amount * 0.09;
-    const sgst = amount * 0.09;
-
-    const rowData = [
-        index + 1,
-        formatDate(booking.bookingDate),
-        booking.items?.[0]?.refNo || booking.bookingId || "",
-        booking.senderName || "",
-        booking.receiverName || "",
-        1,
-        (booking.weight || 0).toFixed(3),
-        (booking.insurance || 0).toFixed(2),
-        amount.toFixed(2),
-        cgst.toFixed(2),
-        sgst.toFixed(2)
-    ];
-
-    const widths = headers.map(h => h.width);
-    const rowHeight = calculateRowHeight(doc, rowData, widths);
-
-    // Page break
-    if (y + rowHeight > 760) {
-        doc.addPage();
-        y = 60;
-    }
-
-    doc.rect(40, y, 520, rowHeight).stroke();
-
-    let x = 40;
-    rowData.forEach((t, i) => {
-        if (i > 0) doc.moveTo(x, y).lineTo(x, y + rowHeight).stroke();
-        doc.text(String(t), x + 3, y + 5, {
-            width: headers[i].width - 6,
-            align: "center"
+const calculateRowHeight = (doc, row, widths) => {
+    let h = 26; // base height increased
+    row.forEach((t, i) => {
+        const ht = doc.heightOfString(String(t), {
+            width: widths[i] - 10,
+            lineBreak: true
         });
-        x += headers[i].width;
+        h = Math.max(h, ht + 14);
     });
+    return h;
+};
 
-    cb(amount, cgst, sgst);
-    return rowHeight;
-}
-
-// ===========================================
-// 🧾 Generate Invoice PDF
-// ===========================================
+// =========================
+// 🧾 Generate Invoice PDF (Clean Black & White Design)
+// =========================
 export const generateInvoicePDF = async (data) => {
-    const {
-        invoiceNo,
-        billDate,
-        billingName,
-        billingGst,
-        billingAddress,
-        billingState,
-        stateCode,
-        bookings = [],
-        roundOff = 0.3
-    } = data;
+    const { bookings = [], invoiceNo, billDate } = data;
+    const booking = bookings[0];
+    const station = resolveStationHeader(booking);
 
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const doc = new PDFDocument({
+        size: "A4",
+        margin: 40,
+        info: {
+            Title: `Invoice ${invoiceNo}`,
+            Author: 'Bharat Parcel Services',
+            Subject: 'Tax Invoice'
+        }
+    });
     const buffers = [];
 
     return new Promise((resolve) => {
@@ -117,90 +117,300 @@ export const generateInvoicePDF = async (data) => {
         let y = 40;
 
         // ================= HEADER =================
-        doc.font("Helvetica-Bold").fontSize(16).text("TAX INVOICE", 40, y, { width: 520, align: "center" });
+
+        y += 15;
+
+        // Company name
+        doc.font("Helvetica-Bold").fontSize(18).fillColor('black')
+            .text(station.name, 40, y, { width: 520, align: "center" });
         y += 25;
 
-        doc.fontSize(14).text("Bharat Parcel Services Pvt. Ltd.", { align: "center" });
-        y += 18;
+        // Address details
+        doc.font("Helvetica").fontSize(10).fillColor('black')
+            .text(station.address, { width: 520, align: "center" });
+        y += 12;
+        doc.text(`Phone: ${station.phone}`, { width: 520, align: "center" });
+        y += 12;
 
+        // GST/PAN details
+        doc.font("Helvetica-Bold").fontSize(10).fillColor('black')
+            .text(`GSTIN: ${station.gst} | PAN: ${station.pan} | SAC: ${station.sac}`, { width: 520, align: "center" });
+
+        y += 25;
+
+        // INVOICE title
+        doc.font("Helvetica-Bold").fontSize(22).fillColor('black')
+            .text("TAX INVOICE", 40, y, { width: 520, align: "center" });
+        doc.moveTo(200, y + 25).lineTo(400, y + 25).lineWidth(0.5).strokeColor('black').stroke();
+
+        y += 40;
+
+        const contentStartY = y;
+
+        // ================= BILL TO & INVOICE DETAILS =================
+        doc.moveTo(300, y).lineTo(300, y + 95).lineWidth(0.7).strokeColor('black').stroke();
+
+        let leftY = y + 8;
+        let rightY = y + 8;
+
+        // ================= BILL TO =================
+        doc.font("Helvetica-Bold").fontSize(10).text("BILL TO", 45, leftY);
+        leftY += 16;
+
+        // Sender Name (BOLD)
+        doc.font("Helvetica-Bold").fontSize(9)
+            .text(`${booking.senderName}`, 45, leftY, { width: 240 });
+
+        leftY += doc.heightOfString(`${booking.senderName}`, { width: 240 }) + 4;
+        doc.moveTo(45, leftY).lineTo(285, leftY).lineWidth(0.3).stroke();
+
+        // Address (auto wrap safe)
+        leftY += 4;
         doc.font("Helvetica").fontSize(9)
-            .text("332, Kucha Ghasi Ram, Chandni Chowk, Fatehpuri, Delhi - 110006", { align: "center" });
-        y += 12;
+            .text(`${booking.senderLocality}`, 45, leftY, { width: 240 });
 
-        doc.text("Phone: 011-23955385, 23830010", { align: "center" });
-        y += 12;
+        leftY += doc.heightOfString(`${booking.senderLocality}`, { width: 240 }) + 4;
+        doc.moveTo(45, leftY).lineTo(285, leftY).lineWidth(0.3).stroke();
 
-        doc.text("GSTIN: 07AAECB6506F1ZY | PAN: AAECB6506F | SAC: 9968", { align: "center" });
-        y += 20;
+        // GSTIN
+        leftY += 4;
+        doc.font("Helvetica").fontSize(9)
+            .text(`GSTIN: ${booking.senderGgt || 'N/A'}`, 45, leftY, { width: 240 });
 
-        // ================= BILLING =================
-        doc.rect(40, y, 520, 75).stroke();
-        doc.moveTo(260, y).lineTo(260, y + 75).stroke();
-        doc.moveTo(400, y).lineTo(400, y + 75).stroke();
+        leftY += 12;
+        doc.moveTo(45, leftY).lineTo(285, leftY).lineWidth(0.3).stroke();
 
-        doc.fontSize(9);
-        doc.text(`Party Name: ${billingName}`, 45, y + 6, { width: 200 });
-        doc.text(`Date: ${formatDate(billDate)}`, 265, y + 6);
-        doc.text("Invoice No:", 405, y + 6);
-        doc.font("Helvetica-Bold").text(invoiceNo, 405, y + 20);
 
-        doc.font("Helvetica");
-        doc.text(`State Code: ${stateCode}, ${billingState}`, 45, y + 26);
-        doc.text(`GSTIN: ${billingGst}`, 45, y + 46);
-        doc.text(`Party Address:\n${billingAddress}`, 265, y + 26, { width: 130 });
+        // ================= INVOICE DETAILS =================
+        doc.font("Helvetica-Bold").fontSize(10)
+            .text("INVOICE DETAILS", 305, rightY);
 
-        y += 90;
+        rightY += 16;
+
+        // Invoice No (bold label + value)
+        doc.font("Helvetica-Bold").fontSize(9)
+            .text(`Invoice No: ${invoiceNo || "AUTO"}`, 305, rightY, { width: 240 });
+
+        rightY += 12;
+        doc.moveTo(305, rightY).lineTo(555, rightY).lineWidth(0.3).stroke();
+
+        // Invoice Date
+        rightY += 4;
+        doc.font("Helvetica").fontSize(9)
+            .text(`Invoice Date: ${formatDate(billDate)}`, 305, rightY, { width: 240 });
+
+        rightY += 12;
+        doc.moveTo(305, rightY).lineTo(555, rightY).lineWidth(0.3).stroke();
+
+        // Place of Supply
+        rightY += 4;
+        doc.text(`Place of Supply: ${station.state}`, 305, rightY, { width: 240 });
+
+        rightY += 12;
+        doc.moveTo(305, rightY).lineTo(555, rightY).lineWidth(0.3).stroke();
+
+        // State Code
+        rightY += 4;
+        doc.text(`State Code: ${station.gst?.substring(0, 2) || '07'}`, 305, rightY, { width: 240 });
+
+        rightY += 12;
+        doc.moveTo(305, rightY).lineTo(555, rightY).lineWidth(0.3).stroke();
+
+        // Move Y after box
+        y += 95;
 
         // ================= TABLE HEADER =================
         const headers = [
-            { label: "SR", width: 25 },
-            { label: "DATE", width: 50 },
+            { label: "SR", width: 22 },
+            { label: "DATE", width: 45 },
             { label: "POD NO", width: 55 },
-            { label: "SENDER", width: 65 },
-            { label: "RECEIVER", width: 65 },
-            { label: "NOS", width: 25 },
-            { label: "WT", width: 35 },
-            { label: "INS", width: 30 },
-            { label: "AMOUNT", width: 55 },
-            { label: "CGST", width: 55 },
-            { label: "SGST", width: 60 }
+            { label: "SENDER", width: 70 },
+            { label: "RECEIVER", width: 70 },
+            { label: "NOS", width: 28 },
+            { label: "WT", width: 32 },
+            { label: "INS/VPP", width: 42 },
+            { label: "AMOUNT", width: 45 },
+            { label: "GST", width: 56 },
+            { label: "TOTAL", width: 45 }
         ];
 
-        doc.rect(40, y, 520, 20).stroke();
-        let x = 40;
-        doc.font("Helvetica-Bold").fontSize(8);
-        headers.forEach(h => {
-            doc.text(h.label, x + 2, y + 6, { width: h.width - 4, align: "center" });
+        // Header with borders (white background, black text)
+        const tableWidth = headers.reduce((sum, h) => sum + h.width, 0);
+        const pageWidth = doc.page.width;   // 595
+        const startX = (pageWidth - tableWidth) / 2;  // center align
+        doc.rect(startX, y, tableWidth, 30).lineWidth(1).strokeColor('black').stroke();
+        let x = startX;
+        doc.font("Helvetica-Bold").fontSize(9).fillColor('black');
+        headers.forEach((h, i) => {
+            doc.text(h.label, x + 2, y + 10, { width: h.width - 4, align: "center" });
+            // Draw vertical lines between columns
+            if (i < headers.length - 1) {
+                doc.moveTo(x + h.width, y).lineTo(x + h.width, y + 30).lineWidth(0.5).strokeColor('black').stroke();
+            }
             x += h.width;
         });
-        y += 20;
-
-        // ================= TABLE BODY =================
-        let totalAmount = 0, totalCgst = 0, totalSgst = 0;
-
-        bookings.forEach((b, i) => {
-            const h = createTableRow(doc, y, headers, b, i, (a, c, s) => {
-                totalAmount += a;
-                totalCgst += c;
-                totalSgst += s;
-            });
-            y += h;
-        });
-
-        // ================= TOTAL =================
-        y += 15;
-        const grandTotal = totalAmount + totalCgst + totalSgst + roundOff;
-
-        doc.font("Helvetica-Bold").fontSize(10);
-        doc.text(`GRAND TOTAL : ₹ ${grandTotal.toFixed(2)}`, 350, y);
-
-        y += 25;
-        doc.text(`AMOUNT IN WORDS : INR ${convertNumberToWords(grandTotal)} Only`, 40, y);
 
         y += 30;
-        doc.text("For Bharat Parcel Services Pvt. Ltd.", 380, y);
-        y += 15;
-        doc.text("DIRECTOR", 430, y);
+
+        // ================= TABLE BODY =================
+        let totalAmount = 0, totalIgst = 0;
+        doc.font("Helvetica").fontSize(8).fillColor('black');
+
+        bookings.forEach((b, i) => {
+            const item = b.items?.[0] || {};
+
+            const qty = Number(item.quantity || 0);
+            const wt = Number(item.weight || 0);
+            const insVpp = Number(item.insurance || 0) + Number(item.vppAmount || 0);
+
+            // ✅ taxable base = freight only
+            const freight = Number(b.freight || 0);
+
+            // payment type
+            const payType = item.toPay; // "toPay" | "paid"
+
+            let gstAmount = 0;
+            let gstLabel = "";
+
+            if (payType === "toPay") {
+                gstAmount = freight * 0.18;
+                gstLabel = `IGST 18%: ${gstAmount.toFixed(2)}`;
+            } else if (payType === "paid") {
+                const cgst = freight * 0.09;
+                const sgst = freight * 0.09;
+                gstAmount = cgst + sgst;
+                gstLabel = `CGST 9% + SGST 9%: ${gstAmount.toFixed(2)}`;
+            }
+
+            // ✅ total
+            const total = freight + insVpp + gstAmount;
+
+            const row = [
+                i + 1,
+                formatDate(b.bookingDate),
+                item.receiptNo || b.bookingId,
+                b.senderName,
+                b.receiverName,
+                qty,                        // NOS
+                `${wt} kg`,                 // WT
+                insVpp.toFixed(2),          // INS/VPP
+                freight.toFixed(2),         // FREIGHT
+                gstLabel,  // GST
+                total.toFixed(2)            // TOTAL
+            ];
+
+            const widths = headers.map(h => h.width);
+            const hgt = calculateRowHeight(doc, row, widths);
+
+            if (y + hgt > 760) {
+                doc.addPage();
+                y = 60;
+            }
+
+            // Draw row border
+            doc.rect(startX, y, tableWidth, hgt).lineWidth(0.5).strokeColor('black').stroke();
+            // Draw cell borders and text
+            let xx = startX;
+            row.forEach((t, j) => {
+                let align = "center";
+
+                // Left align for text-heavy columns
+                if ([3, 4].includes(j)) align = "left";     // SENDER, RECEIVER
+                if (j === 9) align = "center";              // GST
+
+                doc.text(String(t), xx + 6, y + 6, {
+                    width: widths[j] - 12,
+                    align,
+                    lineBreak: false,   // 🔥 no wrap
+                    ellipsis: true      // 🔥 cut if too long
+                });
+                // Draw vertical lines between columns
+                if (j > 0) {
+                    doc.moveTo(xx, y).lineTo(xx, y + hgt).lineWidth(0.3).strokeColor('black').stroke();
+                }
+                xx += widths[j];
+            });
+
+            totalAmount += freight;
+            totalIgst += gstAmount;
+            y += hgt;
+        });
+
+        // ================= ROUND OFF CALCULATION =================
+        const gross = totalAmount + totalIgst;        // subtotal + gst
+        const roundedGrand = Math.round(gross);       // nearest rupee
+        const roundOff = (roundedGrand - gross).toFixed(2);  // + / - difference
+
+        // ================= TOTAL SECTION =================
+        // Total box
+        doc.rect(350, y, 210, 85).lineWidth(1).strokeColor('black').stroke();
+
+        // Vertical divider between label & amount
+        doc.moveTo(465, y).lineTo(465, y + 85).lineWidth(0.5).strokeColor('black').stroke();
+
+        doc.font("Helvetica-Bold").fontSize(10).fillColor('black');
+
+        // Subtotal
+        doc.text(`SUB TOTAL:`, 360, y + 15);
+        doc.text(`${totalAmount.toFixed(2)}`, 450, y + 15, { align: "right", width: 95 });
+
+        // GST
+        doc.text(`GST:`, 360, y + 35);
+        doc.text(`${totalIgst.toFixed(2)}`, 450, y + 35, { align: "right", width: 95 });
+
+        // Round Off
+        doc.text(`ROUND OFF:`, 360, y + 50);
+        doc.text(`${roundOff}`, 450, y + 50, { align: "right", width: 95 });
+
+        // Grand Total
+        doc.font("Helvetica-Bold").fontSize(12);
+        doc.text(`GRAND TOTAL:`, 360, y + 65);
+        doc.text(`${roundedGrand.toFixed(2)}`, 450, y + 65, { align: "right", width: 95 });
+
+        // ================= FOOTER =================
+        y += 85;
+
+        // Amount in Words section
+        doc.rect(40, y, 520, 40).lineWidth(0.5).strokeColor('black').stroke();
+
+        doc.font("Helvetica-Bold").fontSize(9).fillColor('black')
+            .text("Amount in Words:", 45, y + 12);
+        doc.font("Helvetica").fontSize(8).fillColor('black')
+            .text(`INR ${convertNumberToWords(roundedGrand).toUpperCase()} ONLY`, 45, y + 25, { width: 500 });
+
+        y += 45;
+
+        // Authorized Signatory section
+        y += 50;
+        doc.moveTo(350, y).lineTo(550, y).lineWidth(0.5).strokeColor('black').stroke();
+        doc.font("Helvetica-Bold").fontSize(9).fillColor('black')
+            .text("For Bharat Parcel Services Pvt. Ltd.", 380, y + 10, { width: 170, align: "center" });
+
+        y += 25;
+        doc.moveTo(350, y).lineTo(550, y).lineWidth(0.5).strokeColor('black').stroke();
+        doc.font("Helvetica-Bold").fontSize(9).fillColor('black')
+            .text("AUTHORIZED SIGNATORY", 380, y + 10, { width: 170, align: "center" });
+
+        const contentEndY = y + 25;   // 🔥 continuous border end point
+
+        // ================= CONTINUOUS OUTER BORDER =================
+
+        const pageBorderX = 40;      // left margin
+        const pageBorderWidth = 520; // fixed content width
+        doc.rect(
+            pageBorderX,
+            contentStartY,
+            pageBorderWidth,
+            contentEndY - contentStartY + 10
+        ).lineWidth(1).strokeColor('black').stroke();
+
+        // Footer line
+        y += 30;
+
+        // Page number
+        doc.font("Helvetica").fontSize(7).fillColor('black')
+            .text(`Invoice ${invoiceNo} | Generated on: ${formatDate(new Date())
+                }`, 40, y + 10, { width: 520, align: "center" });
 
         doc.end();
     });

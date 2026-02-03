@@ -214,6 +214,7 @@ const QuotationForm = () => {
             };
 
             await dispatch(createBooking(payload)).unwrap();
+            alert("✅ Quotation successfully created");
             resetForm();
             navigate('/quotation')
           } catch (error) {

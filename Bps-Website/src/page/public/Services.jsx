@@ -62,7 +62,6 @@ const Services = () => {
           position: "relative",
           width: "100%",
           height: { xs: 250, sm: 300, md: 350, lg: 350 },
-          mt: { xs: 4, sm: 5, md: 6 },
           backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url(${logisticsBanner})`,
           backgroundSize: "cover",
           backgroundPosition: "center",

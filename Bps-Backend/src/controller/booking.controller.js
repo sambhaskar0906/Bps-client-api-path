@@ -12,7 +12,8 @@ import { previewNextBookingReceiptNo } from "../utils/generateReceiptNo.js";
 import { generateAndCommitBookingReceiptNo }
   from "../utils/generateReceiptNo.js";
 import moment from "moment-timezone";
-
+import { uploadToCloudinary } from "../utils/uploadPdfToCloudinary.js";
+import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import mongoose from "mongoose"
 async function resolveStation(name) {
@@ -632,7 +633,7 @@ export const getBookingStatusList = async (req, res) => {
     console.log('Booking filter:', JSON.stringify(filter, null, 2)); // Debug log
 
     const bookings = await Booking.find(filter)
-      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted items') // Added isDeleted to select
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted items quotationPdf') // Added isDeleted to select
       .populate('startStation endStation', 'stationName')
       .populate('createdByRole', 'role')
       .lean();
@@ -661,6 +662,7 @@ export const getBookingStatusList = async (req, res) => {
       SNo: i + 1,
       biltyNo: b.items?.[0]?.receiptNo || "-",
       orderId: b.orderId || 'N/A',
+      quotationPdf: b.quotationPdf || null,
       orderBy:
         b.requestedByRole === 'public'
           ? 'Third Party'
@@ -1465,6 +1467,10 @@ export const generateInvoiceByCustomer = async (req, res) => {
         searchedName: customerName,
       });
     }
+    const normalize = (str = "") =>
+      str.toLowerCase().replace(/\s+/g, " ").trim();
+
+    const searchName = normalize(customerName);
 
     // ✅ Step 1: Determine billing for each booking
     const filteredBookings = bookings.map((booking) => {
@@ -1493,15 +1499,28 @@ export const generateInvoiceByCustomer = async (req, res) => {
     });
 
     // ✅ Step 2: Filter to only include bookings where customer is the billing party
-    const customerBookings = filteredBookings.filter(
-      (b) => b.billingName.toLowerCase() === customerName.toLowerCase()
-    );
+    const customerBookings = filteredBookings.filter(b => {
+      const billing = normalize(b.billingName);
+      const sender = normalize(b.senderName);
+      const receiver = normalize(b.receiverName);
+
+      return (
+        billing.includes(searchName) ||
+        sender.includes(searchName) ||
+        receiver.includes(searchName)
+      );
+    });
 
     if (!customerBookings.length) {
       return res.status(404).json({
-        message: "No bookings found where this party is the billing party",
+        message: "No invoice-eligible bookings found for this customer",
         searchedName: customerName,
-        availableBillingParties: [...new Set(filteredBookings.map(b => b.billingName))]
+        suggestion: "Check spelling / sender / receiver / billing name",
+        availableParties: [...new Set(filteredBookings.map(b => ({
+          billing: b.billingName,
+          sender: b.senderName,
+          receiver: b.receiverName
+        })))]
       });
     }
 
@@ -1942,3 +1961,36 @@ export const previewBookingReceiptNo = async (req, res) => {
     receiptNo, // BPS-DEL-001 (preview only)
   });
 };
+
+// POST /api/v2/bookings/:bookingId/upload-pdf
+export const uploadBookingPdf = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!req.file) {
+    throw new ApiError(400, "File is required");
+  }
+
+  const booking = await Booking.findOne({ bookingId });
+
+  if (!booking) {
+    throw new ApiError(404, "Booking not found");
+  }
+
+  // 🔥 Cloudinary upload
+  const uploadResult = await uploadToCloudinary(
+    req.file.path,
+    "bharatparcel/bookings"
+  );
+
+  // 💾 Save in DB
+  booking.quotationPdf = uploadResult.secure_url;
+  await booking.save();
+
+  res.status(200).json(
+    new ApiResponse(200, {
+      pdfUrl: uploadResult.secure_url,
+      bookingId
+    }, "Booking PDF uploaded successfully")
+  );
+});
+

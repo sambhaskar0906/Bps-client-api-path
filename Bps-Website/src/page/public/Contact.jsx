@@ -508,8 +508,8 @@ const Contact = () => {
 
             <Card sx={{ p: 3, mb: 4, borderRadius: 2, boxShadow: 3 }}>
               {[
-                { icon: <PhoneIcon />, text: "+91 7017866149" },
-                { icon: <EmailIcon />, text: "caarun@rediffmail.com" },
+                { icon: <PhoneIcon />, text: "01145138699" },
+                { icon: <EmailIcon />, text: "info@bharatparcel.org" },
                 {
                   icon: <LocationOnIcon />,
                   text: "332, KUCHA GHASI RAM, FATEH PURI, CHANDNI CHOWK DELHI DL 110006",

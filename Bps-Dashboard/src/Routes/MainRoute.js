@@ -43,7 +43,6 @@ import { getTokenExpiration } from '../utils/auth';
 import ViewBookingByDate from '../Components/ViewBookingByDate';
 import PanddingList from '../Pages/Admin/PanddingList/PanddingList';
 import Cashbook from '../Pages/Admin/Cashbook/Cashbook';
-import StaffCrad from '../Pages/Admin/Staff/StaffCrad';
 import StaffForm from '../Pages/Admin/Staff/Form/StaffForm';
 import QcustomerCard from '../Pages/Admin/Qcustomer/QcustomerCard';
 import QcustomerForm from '../Pages/Admin/Qcustomer/Form/QcustomerForm';
@@ -54,6 +53,9 @@ import ViewQuotationBtDate from '../Components/ViewQuotationByDate';
 import Bin from '../Pages/Admin/Bin/Bin';
 import QBookingForm from '../Pages/Admin/QBooking/Qbooking';
 import BBooking from '../Pages/Admin/BBooking/Bbooking'
+import StaffCard from '../Pages/Admin/Staff/StaffCard';
+import StaffView from '../Pages/Admin/Staff/Form/StaffView';
+import EditStaff from '../Pages/Admin/Staff/Form/EditStaff';
 
 
 const MainRoute = () => {
@@ -178,6 +180,10 @@ const MainRoute = () => {
 
                 {/* Bin */}
                 <Route path="/bin" element={<Bin />} />
+                <Route path='/staff' element={<StaffCard />} />
+                <Route path='/staffform' element={<StaffForm />} />
+                <Route path="/staffview/:staffId" element={<StaffView />} />
+                <Route path="/editstaff/:staffId" element={<EditStaff />} />
 
                 {/* Users (Admin Only) */}
                 {role !== 'supervisor' && (
@@ -188,9 +194,6 @@ const MainRoute = () => {
                         <Route path="/edituser/:adminId" element={<EditUser />} />
                         {/* Cashbook */}
                         <Route path='/cashbook' element={<Cashbook />} />
-                        {/* Staff */}
-                        <Route path='/staff' element={<StaffCrad />} />
-                        <Route path='/staffform' element={<StaffForm />} />
                     </>
                 )}
             </Routes>

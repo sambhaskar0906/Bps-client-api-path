@@ -23,3 +23,4 @@ export const USERS_API = `${API_BASE_URL}/users`;
 export const VEHICLES_API = `${API_BASE_URL}/vehicles`;
 export const STATIONS_API = `${API_BASE_URL}/stations`;
 export const AUTH_API = `${API_BASE_URL}/users`;
+export const STAFF_API = `${API_BASE_URL}/staff`;

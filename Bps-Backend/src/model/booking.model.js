@@ -265,6 +265,10 @@ const BookingSchema = new mongoose.Schema(
     invoiceRef: { type: mongoose.Schema.Types.ObjectId, ref: "Invoice" },
     invoiceNo: { type: String, default: null },
     billDate: { type: Date },
+    quotationPdf: {
+      type: String,
+      default: null
+    },
     createdByRole: {
       type: String,
       enum: ['admin', 'supervisor'],

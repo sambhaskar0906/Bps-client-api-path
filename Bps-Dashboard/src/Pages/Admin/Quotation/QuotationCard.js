@@ -22,7 +22,11 @@ import {
   useTheme,
   Button,
   Tooltip,
-  Checkbox, // Added Checkbox
+  Checkbox,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogActions, // Added Checkbox
 } from "@mui/material";
 import {
   CancelScheduleSend as CancelScheduleSendIcon,
@@ -41,12 +45,13 @@ import {
   fetchActiveBooking,
   fetchCancelledBooking,
   deleteBooking,
-  sendWhatsAppMsg,
   sendBookingEmail,
   revenueList,
   viewBookingById,
-  clearViewedBooking
+  clearViewedBooking,
+  uploadQuotationPdf
 } from "../../../features/quotation/quotationSlice";
+import { sendBookingConfirmWhatsapp } from "../../../features/whatsapp/whatsappSlice";
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { finalizeDelivery } from "../../../features/delivery/deliverySlice";
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -54,6 +59,9 @@ import { Snackbar, Alert } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import QSlipModal from "../../../Components/QSlipModal";
+import UploadIcon from '@mui/icons-material/Upload';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+
 
 function descendingComparator(a, b, orderBy) {
   if (orderBy === "quotationDate") {
@@ -110,11 +118,11 @@ const headCells = [
   { id: "bookingId", label: "Order By", sortable: true, width: 120 },
   { id: "quotationDate", label: "Date", sortable: true, width: 100 },
   { id: "senderName", label: "Name", sortable: true, width: 120 },
-  { id: "pickupCity", label: "Pick Up", sortable: false, width: 120 },
+  { id: "pickupCity", label: "Pick Up", sortable: false, width: 80 },
   { id: "receiverName", label: "Name", sortable: false, width: 120 },
-  { id: "dropCity", label: "Drop", sortable: false, width: 120 },
+  { id: "dropCity", label: "Drop", sortable: false, width: 80 },
   { id: "contact", label: "Contact", sortable: false, width: 120 },
-  { id: "action", label: "Action", sortable: false, width: 250 },
+  { id: "action", label: "Action", sortable: false, width: 320 },
 ];
 
 const revenueHeadCells = [
@@ -144,9 +152,19 @@ const QuotationCard = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedList, setSelectedList] = useState("request");
   const [openSnackbar, setOpenSnackbar] = useState(false);
+  const fileInputRef = React.useRef(null);
+  const [selectedBookingId, setSelectedBookingId] = useState(null);
+  const [openUploadModal, setOpenUploadModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
-  const { list: bookingList = [], revenueList: revenueData = [], requestCount, activeDeliveriesCount, cancelledDeliveriesCount, totalRevenue } =
+  const { list: bookingList = [], revenueList: revenueData = [], requestCount, activeDeliveriesCount, cancelledDeliveriesCount, totalRevenue, uploadedPdfUrl, pdfUploadLoading } =
     useSelector((state) => state.quotations);
+  const [openPdfPreview, setOpenPdfPreview] = useState(false);
+  const [previewPdfUrl, setPreviewPdfUrl] = useState(null);
+  const [openPdfSnackbar, setOpenPdfSnackbar] = useState(false);
+  const [openPreviewModal, setOpenPreviewModal] = useState(false);
+  const [previewLink, setPreviewLink] = useState(null);
 
   const booking = useSelector((state) => state.quotations.viewedBooking);
 
@@ -211,6 +229,7 @@ const QuotationCard = () => {
     if (route) navigate(route);
   };
 
+
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
@@ -248,24 +267,97 @@ const QuotationCard = () => {
       });
   };
 
-  const handleWhatsAppSend = (bookingId) => {
-    if (!bookingId) return;
+  const handleWhatsAppSend = (row) => {
+    if (!row) return;
 
     const confirmSend = window.confirm(
-      "Are you sure you want to send this quotation on WhatsApp?"
+      "Are you sure you want to send booking confirmation on WhatsApp?"
     );
 
     if (!confirmSend) return;
 
-    dispatch(sendWhatsAppMsg(bookingId))
+    const bookingId = row.bookingId || row["Booking ID"];
+
+    if (!bookingId) {
+      alert("❌ Booking ID not found");
+      return;
+    }
+
+    dispatch(sendBookingConfirmWhatsapp(bookingId))
       .unwrap()
       .then(() => {
         setOpenWhatsappSnackbar(true);
       })
       .catch((err) => {
-        alert(err || "Failed to send WhatsApp");
+        alert(err?.message || "Failed to send WhatsApp");
       });
   };
+
+  // 📤 Upload handlers
+  const handleUploadClick = (bookingId) => {
+    setSelectedBookingId(bookingId);
+    fileInputRef.current.click();
+  };
+
+  const handlePdfPreview = (url) => {
+    if (!url) {
+      alert("No PDF uploaded for this booking");
+      return;
+    }
+    setPreviewLink(url);
+    setOpenPreviewModal(true);
+  };
+
+  const handleClosePreview = () => {
+    setOpenPreviewModal(false);
+    setPreviewLink(null);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedBookingId) return;
+
+    setSelectedFile(file);
+
+    // Preview URL
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+
+    // Modal open
+    setOpenUploadModal(true);
+
+    // reset input
+    e.target.value = "";
+  };
+
+  const handleUploadCancel = () => {
+    setOpenUploadModal(false);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setSelectedBookingId(null);
+  };
+
+  const handleFinalUpload = () => {
+    if (!selectedFile || !selectedBookingId) return;
+
+    dispatch(uploadQuotationPdf({
+      bookingId: selectedBookingId,
+      file: selectedFile
+    }))
+      .unwrap()
+      .then((res) => {
+        setOpenPdfSnackbar(true);   // success snackbar
+        setOpenUploadModal(false);  // modal close
+        setSelectedFile(null);
+        setPreviewUrl(null);
+        setSelectedBookingId(null);
+        dispatch(fetchActiveBooking());
+      })
+      .catch(() => {
+        alert("❌ PDF upload failed");
+      });
+  };
+
 
   const handleSlipClick = (bookingId) => {
     dispatch(viewBookingById(bookingId))
@@ -363,6 +455,14 @@ const QuotationCard = () => {
 
   return (
     <Box sx={{ p: 2 }}>
+      {/* Hidden file input for PDF/Image upload */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        hidden
+        accept="application/pdf,image/*"
+        onChange={handleFileChange}
+      />
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", p: 2, mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600 }}>
           Manage Quotation
@@ -670,9 +770,7 @@ const QuotationCard = () => {
                                     color: "#075E54",
                                   }
                                 }}
-                                onClick={() =>
-                                  handleWhatsAppSend(row["Booking ID"] || row.bookingId)
-                                }
+                                onClick={() => handleWhatsAppSend(row)}
                               >
                                 <WhatsAppIcon fontSize="small" />
                               </IconButton>
@@ -687,6 +785,34 @@ const QuotationCard = () => {
                                 <ReceiptIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
+                            {/* 📤 Upload PDF (ONLY ACTIVE DELIVERIES TAB) */}
+                            {selectedList === "active" && (
+                              <Tooltip title="Upload PDF" arrow>
+                                <IconButton
+                                  size="small"
+                                  color="success"
+                                  onClick={() => handleUploadClick(row["Booking ID"] || row.bookingId)}
+                                  sx={{ minWidth: 'auto', padding: '6px' }}
+                                >
+                                  <UploadIcon fontSize="small" color="#000" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+
+                            {/* 👁 Preview Uploaded PDF */}
+                            {selectedList === "active" && row.quotationPdf && (
+                              <Tooltip title="Preview PDF" arrow>
+                                <IconButton
+                                  size="small"
+                                  color="info"
+                                  onClick={() => handlePdfPreview(row.quotationPdf)}
+                                  sx={{ minWidth: 'auto', padding: '6px' }}
+                                >
+                                  <PictureAsPdfIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+
                           </Box>
                         </TableCell>
                       </>
@@ -727,6 +853,125 @@ const QuotationCard = () => {
           bookingData={booking}
         />
 
+        {/* Upload Preview Modal */}
+        <Dialog
+          open={openUploadModal}
+          onClose={handleUploadCancel}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "95vh",        // 🔥 dialog height
+              maxHeight: "95vh",
+              borderRadius: 3,
+            }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 600 }}>
+            Upload Quotation File
+          </DialogTitle>
+
+          <DialogContent
+            sx={{
+              height: "100%",
+              overflow: "auto",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {previewUrl && (
+              <>
+                {selectedFile?.type === "application/pdf" ? (
+                  <iframe
+                    src={previewUrl}
+                    title="PDF Preview"
+                    style={{
+                      width: "100%",
+                      height: "100%",   // 🔥 full height preview
+                      border: "none",
+                    }}
+                  />
+                ) : (
+                  <Box sx={{ textAlign: "center" }}>
+                    <img
+                      src={previewUrl}
+                      alt="Preview"
+                      style={{
+                        maxWidth: "100%",
+                        maxHeight: "90vh",  // 🔥 large image preview
+                        borderRadius: 8,
+                      }}
+                    />
+                  </Box>
+                )}
+              </>
+            )}
+          </DialogContent>
+
+          <DialogActions sx={{ p: 2 }}>
+            <Button variant="outlined" color="error" onClick={handleUploadCancel}>
+              Cancel
+            </Button>
+
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleFinalUpload}
+              disabled={pdfUploadLoading}
+              startIcon={<UploadIcon />}
+            >
+              {pdfUploadLoading ? "Uploading..." : "Upload"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* PDF Preview Modal */}
+        <Dialog
+          open={openPreviewModal}
+          onClose={handleClosePreview}
+          maxWidth="lg"
+          fullWidth
+          PaperProps={{
+            sx: {
+              height: "90vh",
+              borderRadius: 3
+            }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 600 }}>
+            Quotation PDF Preview
+          </DialogTitle>
+
+          <DialogContent sx={{ p: 0 }}>
+            {previewLink && (
+              <iframe
+                src={previewLink}
+                title="Quotation PDF"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  border: "none"
+                }}
+              />
+            )}
+          </DialogContent>
+
+          <DialogActions>
+            <Button onClick={handleClosePreview} variant="outlined">
+              Close
+            </Button>
+
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => window.open(previewLink, "_blank")}
+            >
+              Open in New Tab
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         <Snackbar
           open={openEmailSnackbar}
           autoHideDuration={3000}
@@ -756,6 +1001,21 @@ const QuotationCard = () => {
             WhatsApp message sent successfully 📲
           </Alert>
         </Snackbar>
+        <Snackbar
+          open={openPdfSnackbar}
+          autoHideDuration={3000}
+          onClose={() => setOpenPdfSnackbar(false)}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setOpenPdfSnackbar(false)}
+            severity="success"
+            variant="filled"
+          >
+            ✅ PDF uploaded successfully
+          </Alert>
+        </Snackbar>
+
       </Box>
     </Box>
   );

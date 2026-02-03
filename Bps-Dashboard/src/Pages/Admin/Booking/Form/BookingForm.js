@@ -114,12 +114,12 @@ const calculateTotals = (values) => {
   const itemTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const freight = Number(values.freight || itemTotal);
   const ins_vpp = Number(values.ins_vpp || 0);
+  const taxableAmount = freight + ins_vpp;
+  const billTotal = taxableAmount + biltyAmount;
 
-  const billTotal = freight + ins_vpp + biltyAmount;
-
-  const cgst = (Number(values.cgst || 0) / 100) * billTotal;
-  const sgst = (Number(values.sgst || 0) / 100) * billTotal;
-  const igst = (Number(values.igst || 0) / 100) * billTotal;
+  const cgst = (Number(values.cgst || 0) / 100) * taxableAmount;
+  const sgst = (Number(values.sgst || 0) / 100) * taxableAmount;
+  const igst = (Number(values.igst || 0) / 100) * taxableAmount;
 
   let grandTotal = billTotal + cgst + sgst + igst;
 
@@ -244,6 +244,36 @@ const BookingForm = () => {
     return date;
   };
 
+  const EffectSyncPaymentGST = ({ values, setFieldValue }) => {
+    useEffect(() => {
+      const payments = values.items.map(i => i.toPay);
+
+      // if any item is toPay → treat booking as toPay
+      if (payments.includes("toPay")) {
+        setFieldValue("igst", "18");
+        setFieldValue("cgst", "0");
+        setFieldValue("sgst", "0");
+        return;
+      }
+
+      // if paid (and no toPay)
+      if (payments.includes("paid")) {
+        setFieldValue("igst", "0");
+        setFieldValue("cgst", "9");
+        setFieldValue("sgst", "9");
+        return;
+      }
+
+      // none or empty
+      setFieldValue("igst", "0");
+      setFieldValue("cgst", "0");
+      setFieldValue("sgst", "0");
+
+    }, [values.items, setFieldValue]);
+
+    return null;
+  };
+
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
@@ -292,8 +322,13 @@ const BookingForm = () => {
           return (
             <Form>
               <ReceiptPreviewSync receiptPreview={receiptPreview} />
-              <EffectSyncCities values={values} dispatch={dispatch} setSenderCities={setSenderCities}
-                setReceiverCities={setReceiverCities} />
+              <EffectSyncCities
+                values={values}
+                dispatch={dispatch}
+                setSenderCities={setSenderCities}
+                setReceiverCities={setReceiverCities}
+              />
+              <EffectSyncPaymentGST values={values} setFieldValue={setFieldValue} />
               <EffectSyncTotals values={values} setFieldValue={setFieldValue} />
               <Button
                 variant="outlined"

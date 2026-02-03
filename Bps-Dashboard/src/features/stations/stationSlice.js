@@ -120,7 +120,8 @@ const stationSlice = createSlice({
       state.form = initialState.form;
     },
     addStation: (state, action) => {
-      state.list.push(action.payload);
+      const safeList = Array.isArray(state.list) ? state.list : [];
+      state.list = [...safeList, action.payload];
     },
     setStations: (state, action) => {
       state.list = action.payload;

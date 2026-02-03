@@ -178,6 +178,10 @@ const quotationSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  quotationPdf: {
+    type: String,
+    default: null
+  },
   createdByRole: {
     type: String,
     enum: ['admin', 'supervisor'],

@@ -23,7 +23,9 @@ import {
     LinearProgress,
     Tooltip,
     useTheme,
-    alpha
+    alpha,
+    TextField,
+    InputAdornment
 } from '@mui/material';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -33,6 +35,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import SmartphoneIcon from '@mui/icons-material/Smartphone';
 import EastIcon from '@mui/icons-material/East';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchBookingsByType } from '../../../features/booking/bookingSlice';
 import { fetchBookingRequest as fetchQuotationRequest } from '../../../features/quotation/quotationSlice';
@@ -41,16 +44,38 @@ import { assignDeliveries, finalDeliveryList, finalDeliveryWhatsApp, finalDelive
 const DeliveryCard = () => {
     const dispatch = useDispatch();
     const theme = useTheme();
-    const { requestCount: bookingRequestCountValue, list: bookingList, loading: bookingLoading } = useSelector((state) => state.bookings);
-    const { requestCount: quotationRequestCountValue, list: quotationList, loading: quotationLoading } = useSelector((state) => state.quotations);
+    const {
+        requestCount: bookingRequestCountValue,
+        list: rawBookingList,
+        loading: bookingLoading
+    } = useSelector((state) => state.bookings);
+    const bookingList = Array.isArray(rawBookingList) ? rawBookingList : [];
+    const {
+        requestCount: quotationRequestCountValue,
+        list: rawQuotationList,
+        loading: quotationLoading
+    } = useSelector((state) => state.quotations);
+    const quotationList = Array.isArray(rawQuotationList) ? rawQuotationList : [];
     const { list: finalList } = useSelector((state) => state.deliveries);
 
     const [selectedCard, setSelectedCard] = useState('booking');
     const [selectedItems, setSelectedItems] = useState({ booking: [], quotation: [], final: [] });
+    const finalBookingList = (finalList || []).filter(item => item.deliveryType === "Booking");
+    const finalQuotationList = (finalList || []).filter(item => item.deliveryType === "Quotation");
+    const [searchText, setSearchText] = useState('');
+    // New state for final delivery tab dropdown
+    const [finalDeliveryType, setFinalDeliveryType] = useState('booking');
 
     const [driver, setDriver] = useState('');
     const [vehicle, setVehicle] = useState('');
     const [device, setDevice] = useState('');
+    const getToName = (item) => {
+        if (selectedCard === 'booking' && item.data && Array.isArray(item.data)) {
+            const firstItem = item.data[0];
+            return firstItem?.toName || firstItem?.Name || 'N/A';
+        }
+        return item.toName || item.Name || 'N/A';
+    };
     const {
         driver: driverList = [],
         vehicle: vehicleList = []
@@ -65,9 +90,11 @@ const DeliveryCard = () => {
     }, [dispatch]);
 
     useEffect(() => {
-        const type = selectedCard === 'quotation' ? 'Quotation' : 'Booking';
-        dispatch(VehicleAvailabile(type));
-        dispatch(driverAvailabile(type));
+        if (selectedCard !== 'final') {
+            const type = selectedCard === 'quotation' ? 'Quotation' : 'Booking';
+            dispatch(VehicleAvailabile(type));
+            dispatch(driverAvailabile(type));
+        }
     }, [selectedCard, dispatch]);
 
     const handleCardClick = (type) => {
@@ -77,6 +104,11 @@ const DeliveryCard = () => {
     const handleSend = (orderId) => {
         dispatch(finalDeliveryWhatsApp(orderId));
         dispatch(finalDeliveryMail(orderId));
+    };
+
+    const handlePreview = (pdfUrl) => {
+        if (!pdfUrl) return;
+        window.open(pdfUrl, "_blank");
     };
 
     const handleCheckboxChange = (id) => {
@@ -91,6 +123,50 @@ const DeliveryCard = () => {
             };
         });
     };
+
+    const filteredBookingList = bookingList?.filter(item => {
+        const text = searchText.toLowerCase();
+        const orderId = (item?.data?.orderId || item.bookingId || '').toLowerCase();
+        const from = (item.fromName || '').toLowerCase();
+        const to = getToName(item).toLowerCase();
+        const pickup = (item.pickup || '').toLowerCase();
+        const drop = (item.drop || '').toLowerCase();
+        const contact = (item.contact || '').toLowerCase();
+
+        return (
+            orderId.includes(text) ||
+            from.includes(text) ||
+            to.includes(text) ||
+            pickup.includes(text) ||
+            drop.includes(text) ||
+            contact.includes(text)
+        );
+    });
+
+    const filteredQuotationList = quotationList?.filter(item => {
+        const text = searchText.toLowerCase();
+        const orderId = (
+            item?.data?.orderId ||
+            item.quotationOrderId ||
+            item.quotationId ||
+            ''
+        ).toLowerCase();
+
+        const from = (item.fromName || '').toLowerCase();
+        const to = getToName(item).toLowerCase();
+        const pickup = (item.pickup || '').toLowerCase();
+        const drop = (item.drop || '').toLowerCase();
+        const contact = (item.contact || '').toLowerCase();
+
+        return (
+            orderId.includes(text) ||
+            from.includes(text) ||
+            to.includes(text) ||
+            pickup.includes(text) ||
+            drop.includes(text) ||
+            contact.includes(text)
+        );
+    });
 
     const handleAssign = () => {
         const selectedVehicle = vehicleList.find((v) => v.vehicleId === vehicle);
@@ -111,7 +187,7 @@ const DeliveryCard = () => {
                 setDevice('');
                 dispatch(fetchBookingsByType('request'));
                 dispatch(fetchQuotationRequest());
-                dispatch(finalDeliveryList()); // Refresh final list after assignment
+                dispatch(finalDeliveryList());
             }
         });
     };
@@ -146,17 +222,33 @@ const DeliveryCard = () => {
         }
     ];
 
-    const currentList = selectedCard === 'quotation' ? quotationList : selectedCard === 'final' ? finalList : bookingList;
     const currentLoading = selectedCard === 'quotation' ? quotationLoading : selectedCard === 'final' ? false : bookingLoading;
 
-    // Get "toName" from API data for booking and quotation
-    const getToName = (item) => {
-        if (selectedCard === 'booking' && item.data && Array.isArray(item.data)) {
-            const firstItem = item.data[0];
-            return firstItem?.toName || firstItem?.Name || 'N/A';
-        }
-        return item.toName || item.Name || 'N/A';
+    const getUniqueId = (item, idx, type) => {
+        return item._id || item.bookingId || item.quotationId || `${type}-${idx}`;
     };
+
+    // Filter final list based on selected dropdown
+    const getFilteredFinalList = () => {
+        if (finalDeliveryType === 'booking') {
+            return finalBookingList;
+        } else {
+            return finalQuotationList;
+        }
+    };
+
+    const filteredFinalList = getFilteredFinalList();
+    const filteredFinalSearchList = filteredFinalList.filter(item => {
+        const text = searchText.toLowerCase();
+        return (
+            (item.orderId || '').toLowerCase().includes(text) ||
+            (item.fromName || '').toLowerCase().includes(text) ||
+            (item.toName || '').toLowerCase().includes(text) ||
+            (item.pickup || '').toLowerCase().includes(text) ||
+            (item.drop || '').toLowerCase().includes(text) ||
+            (item.contact || '').toLowerCase().includes(text)
+        );
+    });
 
     return (
         <Box sx={{ padding: 3 }}>
@@ -246,128 +338,170 @@ const DeliveryCard = () => {
                 ))}
             </Box>
 
-            {/* Assignment Panel */}
-            <Paper
-                elevation={3}
+            {/* Assignment Panel - Show only for booking and quotation tabs */}
+            {selectedCard !== 'final' && (
+                <Paper
+                    elevation={3}
+                    sx={{
+                        p: 3,
+                        mb: 4,
+                        borderRadius: 3,
+                        backgroundColor: theme.palette.background.default
+                    }}
+                >
+                    <Typography variant="h6" fontWeight={600} gutterBottom mb={3}>
+                        Assignment Panel
+                    </Typography>
+
+                    <Box sx={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 3,
+                        alignItems: 'center',
+                    }}>
+                        <FormControl
+                            size="medium"
+                            sx={{
+                                minWidth: 240,
+                                flex: 1
+                            }}
+                        >
+                            <InputLabel>Driver</InputLabel>
+                            <Select
+                                value={driver}
+                                onChange={(e) => setDriver(e.target.value)}
+                                label="Driver"
+                                startAdornment={<PersonIcon sx={{ mr: 1, color: 'action.active' }} />}
+                            >
+                                <MenuItem value="">
+                                    <em>Select Driver</em>
+                                </MenuItem>
+                                {driverList.map((d) => (
+                                    <MenuItem key={d.driverId} value={d.driverId}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
+                                                {d.name?.[0] || d.driverName?.[0] || 'D'}
+                                            </Avatar>
+                                            <span>{d.name || d.driverName}</span>
+                                        </Box>
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        <FormControl
+                            size="medium"
+                            sx={{
+                                minWidth: 240,
+                                flex: 1
+                            }}
+                        >
+                            <InputLabel>Vehicle</InputLabel>
+                            <Select
+                                value={vehicle}
+                                onChange={(e) => setVehicle(e.target.value)}
+                                label="Vehicle"
+                                startAdornment={<DirectionsCarIcon sx={{ mr: 1, color: 'action.active' }} />}
+                            >
+                                <MenuItem value="">
+                                    <em>Select Vehicle</em>
+                                </MenuItem>
+                                {vehicleList.map((v) => (
+                                    <MenuItem key={v._id || v.vehicleId} value={v.vehicleId}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <DirectionsCarIcon fontSize="small" />
+                                            <span>{v.vehicleModel}</span>
+                                        </Box>
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+
+                        <FormControl
+                            size="medium"
+                            sx={{
+                                minWidth: 200,
+                                flex: 1
+                            }}
+                        >
+                            <InputLabel>Device</InputLabel>
+                            <Select
+                                value={device}
+                                onChange={(e) => setDevice(e.target.value)}
+                                label="Device"
+                                startAdornment={<SmartphoneIcon sx={{ mr: 1, color: 'action.active' }} />}
+                            >
+                                <MenuItem value="">
+                                    <em>Select Device</em>
+                                </MenuItem>
+                                <MenuItem value="Device 1">Device 1</MenuItem>
+                                <MenuItem value="Device 2">Device 2</MenuItem>
+                            </Select>
+                        </FormControl>
+
+                        <Button
+                            variant="contained"
+                            size="large"
+                            sx={{
+                                height: 56,
+                                px: 4,
+                                borderRadius: 2,
+                                fontWeight: 600,
+                                minWidth: 160,
+                                background: 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)'
+                            }}
+                            onClick={handleAssign}
+                            disabled={!driver || !vehicle || selectedItems[selectedCard].length === 0}
+                            endIcon={<EastIcon />}
+                        >
+                            Assign Delivery
+                        </Button>
+                    </Box>
+                </Paper>
+            )}
+
+            <Box
                 sx={{
-                    p: 3,
-                    mb: 4,
-                    borderRadius: 3,
-                    backgroundColor: theme.palette.background.default
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    mb: 2
                 }}
             >
-                <Typography variant="h6" fontWeight={600} gutterBottom mb={3}>
-                    Assignment Panel
-                </Typography>
-
-                <Box sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 3,
-                    alignItems: 'center',
-                }}>
-                    <FormControl
-                        size="medium"
-                        sx={{
-                            minWidth: 240,
-                            flex: 1
-                        }}
-                    >
-                        <InputLabel>Driver</InputLabel>
-                        <Select
-                            value={driver}
-                            onChange={(e) => setDriver(e.target.value)}
-                            label="Driver"
-                            startAdornment={<PersonIcon sx={{ mr: 1, color: 'action.active' }} />}
-                        >
-                            <MenuItem value="">
-                                <em>Select Driver</em>
-                            </MenuItem>
-                            {driverList.map((d) => (
-                                <MenuItem key={d.driverId} value={d.driverId}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Avatar sx={{ width: 24, height: 24, fontSize: 12 }}>
-                                            {d.name?.[0] || d.driverName?.[0] || 'D'}
-                                        </Avatar>
-                                        <span>{d.name || d.driverName}</span>
-                                    </Box>
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-
-                    <FormControl
-                        size="medium"
-                        sx={{
-                            minWidth: 240,
-                            flex: 1
-                        }}
-                    >
-                        <InputLabel>Vehicle</InputLabel>
-                        <Select
-                            value={vehicle}
-                            onChange={(e) => setVehicle(e.target.value)}
-                            label="Vehicle"
-                            startAdornment={<DirectionsCarIcon sx={{ mr: 1, color: 'action.active' }} />}
-                        >
-                            <MenuItem value="">
-                                <em>Select Vehicle</em>
-                            </MenuItem>
-                            {vehicleList.map((v) => (
-                                <MenuItem key={v._id || v.vehicleId} value={v.vehicleId}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <DirectionsCarIcon fontSize="small" />
-                                        <span>{v.vehicleModel}</span>
-                                    </Box>
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
-
-                    <FormControl
-                        size="medium"
-                        sx={{
-                            minWidth: 200,
-                            flex: 1
-                        }}
-                    >
-                        <InputLabel>Device</InputLabel>
-                        <Select
-                            value={device}
-                            onChange={(e) => setDevice(e.target.value)}
-                            label="Device"
-                            startAdornment={<SmartphoneIcon sx={{ mr: 1, color: 'action.active' }} />}
-                        >
-                            <MenuItem value="">
-                                <em>Select Device</em>
-                            </MenuItem>
-                            <MenuItem value="Device 1">Device 1</MenuItem>
-                            <MenuItem value="Device 2">Device 2</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    <Button
-                        variant="contained"
-                        size="large"
-                        sx={{
-                            height: 56,
-                            px: 4,
-                            borderRadius: 2,
-                            fontWeight: 600,
-                            minWidth: 160,
-                            background: 'linear-gradient(45deg, #1976d2 30%, #2196f3 90%)'
-                        }}
-                        onClick={handleAssign}
-                        disabled={!driver || !vehicle || selectedItems[selectedCard].length === 0}
-                        endIcon={<EastIcon />}
-                    >
-                        Assign Delivery
-                    </Button>
-                </Box>
-            </Paper>
+                <TextField
+                    size="small"
+                    placeholder="Search delivery..."
+                    value={searchText}
+                    onChange={(e) => setSearchText(e.target.value)}
+                    sx={{ width: 280 }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                🔍
+                            </InputAdornment>
+                        ),
+                    }}
+                />
+            </Box>
 
             {/* Delivery List Table */}
             <Paper elevation={2} sx={{ borderRadius: 3, overflow: 'hidden' }}>
+                {/* Dropdown for Final Delivery Tab */}
+                {selectedCard === 'final' && (
+                    <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', backgroundColor: alpha(theme.palette.success.main, 0.05) }}>
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                            <InputLabel>Delivery Type</InputLabel>
+                            <Select
+                                value={finalDeliveryType}
+                                onChange={(e) => setFinalDeliveryType(e.target.value)}
+                                label="Delivery Type"
+                            >
+                                <MenuItem value="booking">📦 Booking Delivery</MenuItem>
+                                <MenuItem value="quotation">📄 Quotation Delivery</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </Box>
+                )}
+
                 <TableContainer>
                     <Table>
                         <TableHead>
@@ -393,8 +527,6 @@ const DeliveryCard = () => {
                                 {selectedCard === 'final' && (
                                     <>
                                         <TableCell>Contact</TableCell>
-                                        {/* <TableCell>Driver</TableCell>
-                                        <TableCell>Vehicle</TableCell> */}
                                         <TableCell align="center">Actions</TableCell>
                                     </>
                                 )}
@@ -403,145 +535,32 @@ const DeliveryCard = () => {
                         <TableBody>
                             {currentLoading ? (
                                 <TableRow>
-                                    <TableCell colSpan={selectedCard === 'final' ? 10 : 7} align="center" sx={{ py: 4 }}>
+                                    <TableCell colSpan={selectedCard === 'final' ? 8 : 7} align="center" sx={{ py: 4 }}>
                                         <Box sx={{ width: '100%' }}>
                                             <LinearProgress />
                                             <Typography sx={{ mt: 2 }}>Loading deliveries...</Typography>
                                         </Box>
                                     </TableCell>
                                 </TableRow>
-                            ) : currentList?.length > 0 ? (
-                                currentList.map((item, idx) => {
-                                    // Final Delivery Tab - Different data structure
-                                    if (selectedCard === 'final') {
-                                        return (
-                                            <TableRow
-                                                key={item.orderId || idx}
-                                                hover
-                                                sx={{
-                                                    '&:hover': { backgroundColor: theme.palette.action.hover },
-                                                    '&:last-child td': { borderBottom: 0 }
-                                                }}
-                                            >
-                                                {/* S.No */}
-                                                <TableCell>
-                                                    <Chip
-                                                        label={item.SNo || idx + 1}
-                                                        size="small"
-                                                        sx={{
-                                                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                                                            color: theme.palette.primary.main,
-                                                            fontWeight: 600
-                                                        }}
-                                                    />
-                                                </TableCell>
-
-                                                {/* Order ID */}
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight={600}>
-                                                        {item.orderId || 'N/A'}
-                                                    </Typography>
-                                                </TableCell>
-
-                                                {/* From Name */}
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {item.fromName || 'N/A'}
-                                                    </Typography>
-                                                </TableCell>
-
-                                                {/* To Name */}
-                                                <TableCell>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {item.toName || 'N/A'}
-                                                    </Typography>
-                                                </TableCell>
-
-                                                {/* Pickup Location */}
-                                                <TableCell>
-                                                    <Chip
-                                                        label={item.pickup || 'N/A'}
-                                                        size="small"
-                                                        variant="outlined"
-                                                    />
-                                                </TableCell>
-
-                                                {/* Destination (Drop) Location */}
-                                                <TableCell>
-                                                    <Chip
-                                                        label={item.drop || 'N/A'}
-                                                        size="small"
-                                                        color="primary"
-                                                        variant="outlined"
-                                                    />
-                                                </TableCell>
-
-                                                {/* Contact */}
-                                                <TableCell>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        {item.contact || 'N/A'}
-                                                    </Typography>
-                                                </TableCell>
-
-                                                {/* Driver */}
-                                                {/* <TableCell>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        <Avatar sx={{ width: 28, height: 28, fontSize: 12 }}>
-                                                            {item.driverName?.[0] || 'D'}
-                                                        </Avatar>
-                                                        <Typography variant="body2">
-                                                            {item.driverName || 'N/A'}
-                                                        </Typography>
-                                                    </Box>
-                                                </TableCell> */}
-
-                                                {/* Vehicle */}
-                                                {/* <TableCell>
-                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                        <DirectionsCarIcon fontSize="small" color="action" />
-                                                        <Typography variant="body2">
-                                                            {item.vehicle?.vehicleModel || 'N/A'}
-                                                        </Typography>
-                                                    </Box>
-                                                </TableCell> */}
-
-                                                {/* Actions */}
-                                                <TableCell align="center">
-                                                    <Tooltip title="Send Notification">
-                                                        <IconButton
-                                                            color="primary"
-                                                            onClick={() => handleSend(item.orderId)}
-                                                            sx={{
-                                                                backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                                                                '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.2) }
-                                                            }}
-                                                        >
-                                                            <SendIcon />
-                                                        </IconButton>
-                                                    </Tooltip>
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    }
-                                    // Booking and Quotation Tabs - Original logic
-                                    const uniqueId = item._id || item.bookingId || item['Booking ID'] || `index-${idx}`;
+                            ) : selectedCard === 'booking' ? (
+                                filteredBookingList?.length > 0 ? filteredBookingList.map((item, idx) => {
+                                    const uniqueId = getUniqueId(item, idx, 'booking');
                                     const fromName = item.fromName || item.Name || 'N/A';
                                     const toName = getToName(item);
+                                    const orderId = item?.data?.orderId || item.bookingId || item['Booking ID'] || 'N/A';
 
                                     return (
                                         <TableRow
                                             key={uniqueId}
                                             hover
                                             sx={{
-                                                '&:hover': {
-                                                    backgroundColor: theme.palette.action.hover
-                                                },
+                                                '&:hover': { backgroundColor: theme.palette.action.hover },
                                                 '&:last-child td': { borderBottom: 0 }
                                             }}
                                         >
                                             <TableCell align="center">
                                                 <Checkbox
-                                                    checked={selectedItems[selectedCard]?.includes(uniqueId)}
+                                                    checked={selectedItems.booking.includes(uniqueId)}
                                                     onChange={() => handleCheckboxChange(uniqueId)}
                                                     color="primary"
                                                 />
@@ -559,18 +578,13 @@ const DeliveryCard = () => {
                                             </TableCell>
                                             <TableCell>
                                                 <Typography variant="body2" fontWeight={600}>
-                                                    {item?.data?.orderId || item.bookingId || item['Booking ID'] || 'N/A'}
+                                                    {orderId}
                                                 </Typography>
                                             </TableCell>
                                             <TableCell>
-                                                <Box>
-                                                    <Typography variant="body2" fontWeight={500}>
-                                                        {fromName}
-                                                    </Typography>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                        {item.contact || 'No contact'}
-                                                    </Typography>
-                                                </Box>
+                                                <Typography variant="body2" fontWeight={500}>
+                                                    {fromName}
+                                                </Typography>
                                             </TableCell>
                                             <TableCell>
                                                 <Typography variant="body2" fontWeight={500}>
@@ -594,22 +608,209 @@ const DeliveryCard = () => {
                                             </TableCell>
                                         </TableRow>
                                     );
-                                })
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={selectedCard === 'final' ? 10 : 7} align="center" sx={{ py: 6 }}>
-                                        <LocalShippingIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
-                                        <Typography variant="h6" color="text.secondary" gutterBottom>
-                                            No deliveries found
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            {selectedCard === 'final'
-                                                ? 'No final deliveries available'
-                                                : 'No bookings or quotations available for delivery'}
-                                        </Typography>
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                                }) : (
+                                    <TableRow>
+                                        <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                                            <LocalShippingIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                                                No booking deliveries found
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                No bookings available for delivery
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            ) : selectedCard === 'quotation' ? (
+                                filteredQuotationList?.length > 0 ? filteredQuotationList.map((item, idx) => {
+                                    const uniqueId = getUniqueId(item, idx, 'quotation');
+                                    const fromName = item.fromName || item.Name || 'N/A';
+                                    const toName = getToName(item);
+                                    const orderId =
+                                        item["Booking ID"] ||
+                                        item.biltyNo ||
+                                        item?.data?.orderId ||
+                                        item.quotationOrderId ||
+                                        item.quotationId ||
+                                        item.orderId ||
+                                        'N/A';
+
+                                    return (
+                                        <TableRow
+                                            key={uniqueId}
+                                            hover
+                                            sx={{
+                                                '&:hover': { backgroundColor: theme.palette.action.hover },
+                                                '&:last-child td': { borderBottom: 0 }
+                                            }}
+                                        >
+                                            <TableCell align="center">
+                                                <Checkbox
+                                                    checked={selectedItems.quotation.includes(uniqueId)}
+                                                    onChange={() => handleCheckboxChange(uniqueId)}
+                                                    color="primary"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={idx + 1}
+                                                    size="small"
+                                                    sx={{
+                                                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                                        color: theme.palette.primary.main,
+                                                        fontWeight: 600
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={600}>
+                                                    {orderId}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={500}>
+                                                    {fromName}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={500}>
+                                                    {toName}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={item.pickup || item['Pick up'] || 'N/A'}
+                                                    size="small"
+                                                    variant="outlined"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={item.drop || item.Drop || 'N/A'}
+                                                    size="small"
+                                                    color="primary"
+                                                    variant="outlined"
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                }) : (
+                                    <TableRow>
+                                        <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                                            <DescriptionIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                                            <Typography variant="h6" color="text.secondary" gutterBottom>
+                                                No quotation deliveries found
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                No quotations available for delivery
+                                            </Typography>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            ) : selectedCard === 'final' ? (
+                                <>
+                                    {filteredFinalSearchList.length > 0 ? filteredFinalSearchList.map((item, idx) => (
+                                        <TableRow
+                                            key={`${finalDeliveryType}-${item.orderId || idx}`}
+                                            hover
+                                            sx={{
+                                                '&:hover': { backgroundColor: theme.palette.action.hover },
+                                                '&:last-child td': { borderBottom: 0 }
+                                            }}
+                                        >
+                                            <TableCell>
+                                                <Chip
+                                                    label={idx + 1}
+                                                    size="small"
+                                                    sx={{
+                                                        backgroundColor: finalDeliveryType === 'booking'
+                                                            ? alpha(theme.palette.primary.main, 0.1)
+                                                            : alpha(theme.palette.secondary.main, 0.1),
+                                                        color: finalDeliveryType === 'booking'
+                                                            ? theme.palette.primary.main
+                                                            : theme.palette.secondary.main,
+                                                        fontWeight: 600
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={600}>
+                                                    {item.orderId || 'N/A'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={500}>
+                                                    {item.fromName || 'N/A'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" fontWeight={500}>
+                                                    {item.toName || 'N/A'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={item.pickup || 'N/A'}
+                                                    size="small"
+                                                    variant="outlined"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={item.drop || 'N/A'}
+                                                    size="small"
+                                                    color={finalDeliveryType === 'booking' ? 'primary' : 'secondary'}
+                                                    variant="outlined"
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    {item.contact || 'N/A'}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell align="center" sx={{ display: 'flex' }}>
+                                                <Tooltip title="Preview PDF">
+                                                    <IconButton
+                                                        color="info"
+                                                        onClick={() => handlePreview(item.pdfUrl)}
+                                                        sx={{
+                                                            backgroundColor: alpha(theme.palette.info.main, 0.1),
+                                                            '&:hover': { backgroundColor: alpha(theme.palette.info.main, 0.2) }
+                                                        }}
+                                                    >
+                                                        <VisibilityIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Send Notification">
+                                                    <IconButton
+                                                        color="primary"
+                                                        onClick={() => handleSend(item.orderId)}
+                                                        sx={{
+                                                            ml: 1,
+                                                            backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                                            '&:hover': { backgroundColor: alpha(theme.palette.primary.main, 0.2) }
+                                                        }}
+                                                    >
+                                                        <SendIcon />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </TableCell>
+                                        </TableRow>
+                                    )) : (
+                                        <TableRow>
+                                            <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                                                <CheckCircleOutlineIcon sx={{ fontSize: 60, color: 'text.disabled', mb: 2 }} />
+                                                <Typography variant="h6" color="text.secondary" gutterBottom>
+                                                    No final {finalDeliveryType} deliveries found
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    No {finalDeliveryType === 'booking' ? 'booking' : 'quotation'} deliveries have been assigned yet
+                                                </Typography>
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </>
+                            ) : null}
                         </TableBody>
                     </Table>
                 </TableContainer>

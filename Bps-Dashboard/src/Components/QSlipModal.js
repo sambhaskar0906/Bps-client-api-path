@@ -13,9 +13,17 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import BlockIcon from '@mui/icons-material/Block';
 import Chip from '@mui/material/Chip';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import { useDispatch } from "react-redux";
+import { useSelector } from "react-redux";
+import { sendWhatsappBilty } from "../features/whatsapp/whatsappSlice";
+import { PDFDocument } from "pdf-lib";
 
 const QSlipModal = ({ open, handleClose, bookingData }) => {
   const printRef = useRef();
+  const originalRef = useRef();
+  const dispatch = useDispatch();
+  const { loading } = useSelector((state) => state.whatsapp);
 
   const loadImageAsBase64 = (src) =>
     new Promise((resolve) => {
@@ -743,6 +751,72 @@ const QSlipModal = ({ open, handleClose, bookingData }) => {
       </Box>
     </Paper>
   );
+
+  const generateBiltyPdfBlob = async () => {
+    const original = originalRef.current;
+
+    // 🔥 TEMP WRAPPER (ONLY FOR WHATSAPP)
+    const wrapper = document.createElement("div");
+    wrapper.style.width = "210mm";
+    wrapper.style.height = "297mm"; // A4 height
+    wrapper.style.display = "flex";
+    wrapper.style.alignItems = "center";      // ✅ vertical center
+    wrapper.style.justifyContent = "center";  // ✅ horizontal center
+    wrapper.style.background = "#ffffff";
+    wrapper.style.padding = "10mm";
+
+    // Clone original content
+    const clone = original.cloneNode(true);
+    clone.style.margin = "0";
+    clone.style.width = "100%";
+
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    const canvas = await html2canvas(wrapper, {
+      scale: 1.6,
+      useCORS: true,
+      backgroundColor: "#ffffff"
+    });
+
+    document.body.removeChild(wrapper); // 🧹 cleanup
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.7);
+
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    // ✅ Center image vertically on PDF page
+    const yOffset = (pageHeight - imgHeight) / 2;
+
+    pdf.addImage(imgData, "JPEG", 0, yOffset, imgWidth, imgHeight);
+
+    return pdf.output("blob");
+  };
+
+  const handleSendWhatsAppBilty = async () => {
+    try {
+      const pdfBlob = await generateBiltyPdfBlob();
+
+      await dispatch(
+        sendWhatsappBilty({
+          bookingId: bookingData.bookingId,
+          biltyBlob: pdfBlob
+        })
+      ).unwrap();
+
+      alert("✅ Original Bilty successfully sent on WhatsApp");
+    } catch (error) {
+      alert(
+        error?.message ||
+        "❌ Failed to send Bilty. File size too large or server error."
+      );
+    }
+  };
 
   const handleDownloadPDF = async () => {
     await loadImageAsBase64(companySignature);
@@ -1716,20 +1790,28 @@ const QSlipModal = ({ open, handleClose, bookingData }) => {
         overflowY: 'auto',
         fontSize: '12px'
       }}>
-        <Box ref={printRef}>
-          <Invoice copyType="Original" />
-          <Divider sx={{
-            borderColor: 'black',
-            borderStyle: 'dashed',
-            my: 2,
-            fontSize: '12px',
-            textAlign: 'center',
-            fontWeight: 'bold',
-            py: 1,
-            backgroundColor: '#f5f5f5'
-          }}>
+        <Box>
+          {/* ✅ ORIGINAL ONLY (WhatsApp ke liye) */}
+          <Box ref={originalRef}>
+            <Invoice copyType="Original" />
+          </Box>
+
+          {/* ❌ DUPLICATE (sirf UI / print ke liye) */}
+          <Divider
+            sx={{
+              borderColor: 'black',
+              borderStyle: 'dashed',
+              my: 2,
+              fontSize: '12px',
+              textAlign: 'center',
+              fontWeight: 'bold',
+              py: 1,
+              backgroundColor: '#f5f5f5'
+            }}
+          >
             --- DUPLICATE COPY ---
           </Divider>
+
           <Invoice copyType="Duplicate" />
         </Box>
         <Box textAlign="center" mt={2}>
@@ -1758,6 +1840,20 @@ const QSlipModal = ({ open, handleClose, bookingData }) => {
             >
               Print
             </Button>
+            <Button
+              startIcon={<WhatsAppIcon />}
+              onClick={handleSendWhatsAppBilty}
+              disabled={loading}
+              sx={{
+                px: 3,
+                ml: 2,
+                backgroundColor: '#25D366',
+                '&:hover': { backgroundColor: '#1ebe5d' }
+              }}
+            >
+              {loading ? "Sending Bilty..." : "Generate WhatsApp Bilty"}
+            </Button>
+
           </ButtonGroup>
         </Box>
       </Box>

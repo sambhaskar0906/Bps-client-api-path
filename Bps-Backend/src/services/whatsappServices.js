@@ -1,22 +1,46 @@
-// src/services/whatsappServices.js
-import twilio from 'twilio';
-import configObj from '../config/config.js';
+import axios from "axios";
 
-const { twilio: config } = configObj;
-const client = twilio(config.sid, config.authToken);
+export const sendWhatsAppMessage = async ({ to, message }) => {
+  const url = `${process.env.WHATSAPP_API_URL}/${process.env.WHATSAPP_VERSION}/${process.env.WHATSAPP_PHONE_ID}/messages`;
 
-export const sendWhatsAppMessage = async (to, message) => {
-     if (!to) throw new Error("Missing recipient number");
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: {
+      body: message
+    }
+  };
 
-  const toStr = String(to); // convert to string if not already
-  const toNumber = toStr.startsWith('whatsapp:') ? toStr : `whatsapp:${toStr}`;
-     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-    throw new Error("Message body must be a non-empty string");
-  }
-  return await client.messages.create({
-    body: message,
-    from: config.from,
-    to: toNumber,
-  });
+  const headers = {
+    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+    "Content-Type": "application/json"
+  };
+
+  const response = await axios.post(url, payload, { headers });
+  return response.data;
+};
+
+export const sendWhatsAppDocument = async ({ to, documentUrl, filename, caption }) => {
+  const url = `${process.env.WHATSAPP_API_URL}/${process.env.WHATSAPP_VERSION}/${process.env.WHATSAPP_PHONE_ID}/messages`;
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "document",
+    document: {
+      link: documentUrl,
+      filename,
+      caption
+    }
+  };
+
+  const headers = {
+    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+    "Content-Type": "application/json"
+  };
+
+  const response = await axios.post(url, payload, { headers });
+  return response.data;
 };
 

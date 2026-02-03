@@ -279,7 +279,7 @@ const AppBarHeader = () => {
                         <IconButton onClick={handleOpenMenu} sx={{ p: 0 }}>
                             <Avatar
                                 alt={user?.name}
-                                src={`${FILES_BASE_URL}/${user?.adminProfilePhoto?.replace(/\\/g, '/')}`}
+                                src={user?.adminProfilePhoto || ""}
                                 sx={{ width: 40, height: 40 }}
                             />
                         </IconButton>
@@ -308,20 +308,71 @@ const AppBarHeader = () => {
                     anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                     transformOrigin={{ horizontal: 'right', vertical: 'top' }}
                 >
-                    <MenuItem sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-                        <Avatar
-                            src={`${FILES_BASE_URL}/${user?.adminProfilePhoto?.replace(/\\/g, '/')}`}
-                            sx={{ width: 40, height: 40 }}
-                        />
+                    <MenuItem
+                        sx={{
+                            display: 'flex',
+                            gap: 2,
+                            alignItems: 'center',
+                            py: 2,
+                            px: 2,
+                            background: 'linear-gradient(135deg, #1976d2, #42a5f5)',
+                            color: '#fff',
+                            borderRadius: 2,
+                        }}
+                    >
+                        <Badge
+                            overlap="circular"
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                            badgeContent={
+                                <Box
+                                    sx={{
+                                        width: 10,
+                                        height: 10,
+                                        bgcolor: '#4caf50',
+                                        borderRadius: '50%',
+                                        border: '2px solid white',
+                                    }}
+                                />
+                            }
+                        >
+                            <Avatar
+                                src={user?.adminProfilePhoto || "/default-avatar.png"}
+                                sx={{
+                                    width: 52,
+                                    height: 52,
+                                    border: '2px solid #fff',
+                                    boxShadow: 3
+                                }}
+                            />
+                        </Badge>
+
                         <Box>
-                            <Typography variant="subtitle1" fontWeight={600}>
+                            <Typography variant="subtitle1" fontWeight={700}>
                                 {user?.firstName} {user?.lastName}
                             </Typography>
-                            <Typography variant="subtitle2" color="text.secondary">
-                                Admin Id: {user?.adminId}
+
+                            <Typography variant="caption" sx={{ opacity: 0.9, display: "block" }}>
+                                {user?.role?.toUpperCase()}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                                {user?.emailId}
+
+                            <Typography variant="caption" display="block" sx={{ opacity: 0.9 }}>
+                                📧 {user?.emailId}
+                            </Typography>
+
+                            <Typography variant="caption" display="block" sx={{ opacity: 0.85 }}>
+                                🆔 {user?.adminId}
+                            </Typography>
+
+                            <Typography
+                                variant="caption"
+                                display="block"
+                                sx={{
+                                    opacity: 0.9,
+                                    mt: 0.3,
+                                    fontWeight: 500
+                                }}
+                            >
+                                📍 {user?.startStation || "Station Not Assigned"}
                             </Typography>
                         </Box>
                     </MenuItem>

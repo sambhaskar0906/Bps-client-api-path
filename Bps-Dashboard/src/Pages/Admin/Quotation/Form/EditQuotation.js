@@ -199,21 +199,23 @@ const EditQuotationForm = () => {
                                     </Grid>
 
                                     <Grid container spacing={2}>
-                                        <Grid size={{ xs: 12, sm: 6 }}>
+                                        <Grid size={{ xs: 12, md: 6 }}>
                                             <DatePicker
                                                 label="Quotation Date"
                                                 value={values.quotationDate}
                                                 onChange={(val) => setFieldValue("quotationDate", val)}
+                                                format="dd-MM-yyyy"
                                                 renderInput={(params) => (
                                                     <TextField fullWidth {...params} name="quotationDate" />
                                                 )}
                                             />
                                         </Grid>
-                                        <Grid size={{ xs: 12, sm: 6 }} >
+                                        <Grid size={{ xs: 12, md: 6 }} >
                                             <DatePicker
                                                 label="Proposed Delivery Date"
                                                 value={values.proposedDeliveryDate}
                                                 onChange={(val) => setFieldValue("proposedDeliveryDate", val)}
+                                                format="dd-MM-yyyy"
                                                 minDate={values.quotationDate || new Date()}
                                                 renderInput={(params) => (
                                                     <TextField

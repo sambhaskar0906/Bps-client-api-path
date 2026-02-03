@@ -9,7 +9,7 @@ import { Customer } from "../model/customer.model.js";
 import manageStation from "../model/manageStation.model.js";
 import { QCustomer } from "../model/Qcustomer.model.js";
 import { parse } from 'date-fns';
-import { uploadPdfToCloudinary } from "../utils/uploadPdfToCloudinary.js";
+import { uploadToCloudinary } from "../utils/uploadPdfToCloudinary.js";
 import { generateAndCommitReceiptNo } from "../utils/generateReceiptNo.js";
 
 const normalizeDate = (inputDate) => {
@@ -23,13 +23,13 @@ const normalizeDate = (inputDate) => {
 const formatDateOnly = (date) =>
   date ? new Date(date).toISOString().slice(0, 10) : null;
 
-
 const formatQuotations = (quotations) => {
   return quotations.map((q, index) => ({
     "orderId": q.orderId || 'N/A',
     "S.No.": index + 1,
-    biltyNo: q.productDetails?.[0]?.receiptNo || "-",
+    "biltyNo": q.productDetails?.[0]?.receiptNo || "-",
     "Booking ID": q.bookingId,
+    "quotationPdf": q.quotationPdf || null,
     "orderBy": q.createdByRole === "admin"
       ? "Admin"
       : `Supervisor ${q.startStation?.stationName || ''}`,
@@ -798,7 +798,6 @@ export const getIncomingQuotations = asyncHandler(async (req, res) => {
   });
 });
 
-
 export const previewReceiptNo = async (req, res) => {
   const stationCode = req.user.stationCode;
 
@@ -870,5 +869,35 @@ export const sendQuotationWhatsapp = asyncHandler(async (req, res) => {
     message: "WhatsApp quotation sent successfully",
   });
 });
+
+export const uploadQuotationPdf = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!req.file) {
+    throw new ApiError(400, "File is required");
+  }
+
+  const quotation = await Quotation.findOne({ bookingId });
+
+  if (!quotation) {
+    throw new ApiError(404, "Quotation not found");
+  }
+
+  // Upload to Cloudinary
+  const uploadResult = await uploadToCloudinary(
+    req.file.path,
+    "bharatparcel/quotations"
+  );
+
+  // Save URL in DB
+  quotation.quotationPdf = uploadResult.secure_url;
+  await quotation.save();
+
+  res.status(200).json(new ApiResponse(200, {
+    pdfUrl: uploadResult.secure_url,
+    bookingId
+  }, "Quotation PDF uploaded successfully"));
+});
+
 
 

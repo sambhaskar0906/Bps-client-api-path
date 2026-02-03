@@ -1,12 +1,31 @@
-import cloudinary from "./cloudinary.js";
+import cloudinary from "../utils/cloudinary.js";
+import fs from "fs";
 
-export const uploadPdfToCloudinary = async (filePath, bookingId) => {
-    const result = await cloudinary.uploader.upload(filePath, {
-        folder: "bharatparcel/quotations",
-        resource_type: "raw",
-        public_id: `quotation_${bookingId}`,
-        overwrite: true,
-    });
+export const uploadToCloudinary = async (filePath, folder = "quotations") => {
+    try {
+        const result = await cloudinary.uploader.upload(filePath, {
+            folder,
+            resource_type: "auto",   // 🔥 IMPORTANT
+            type: "upload",
+            access_mode: "public",
+            use_filename: true,
+            unique_filename: true
+        });
 
-    return result.secure_url;
+        // ✅ SAFE DELETE
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        return result;
+
+    } catch (error) {
+
+        // ✅ SAFE DELETE ON ERROR
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        throw error;
+    }
 };

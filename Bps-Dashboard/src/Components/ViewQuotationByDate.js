@@ -96,30 +96,45 @@ const ViewQuotationBtDate = () => {
                         0
                     ),
 
-                    totalPaid: bookingsData.reduce(
-                        (acc, b) => acc + Number(b.paidAmount || 0),
-                        0
-                    ),
+                    totalPaid: bookingsData.reduce((acc, b) => {
+                        const product = b.productDetails?.[0];
+                        if (product?.topay === "paid") {
+                            return acc + Number(b.grandTotal || 0);
+                        }
+                        return acc;
+                    }, 0),
 
-                    totalToPay: bookingsData.reduce(
-                        (acc, b) => acc + Number(b.deliveryPendingAmount || 0),
-                        0
-                    ),
+                    totalToPay: bookingsData.reduce((acc, b) => {
+                        const product = b.productDetails?.[0];
+                        if (product?.topay === "toPay") {
+                            return acc + Number(b.grandTotal || 0);
+                        }
+                        return acc;
+                    }, 0),
 
                     totalValue: bookingsData.reduce(
                         (acc, b) => acc + Number(b.grandTotal || 0),
                         0
                     ),
 
-                    balanceDue: bookingsData.reduce(
-                        (acc, b) => acc + Number(b.deliveryPendingAmount || 0),
-                        0
-                    ),
+                    balanceDue: bookingsData.reduce((acc, b) => {
+                        const product = b.productDetails?.[0];
+                        if (product?.topay === "toPay") {
+                            return acc + Number(b.grandTotal || 0);
+                        }
+                        return acc;
+                    }, 0),
 
                     paymentBreakdown: {
-                        fullyPaid: bookingsData.filter(b => b.paymentStatus === "Paid").length,
-                        partiallyPaid: bookingsData.filter(b => b.paymentStatus === "Partial").length,
-                        unpaid: bookingsData.filter(b => b.paymentStatus === "Unpaid").length
+                        fullyPaid: bookingsData.filter(
+                            b => b.productDetails?.[0]?.topay === "paid"
+                        ).length,
+
+                        unpaid: bookingsData.filter(
+                            b => b.productDetails?.[0]?.topay === "toPay"
+                        ).length,
+
+                        partiallyPaid: 0
                     }
                 };
 
@@ -268,9 +283,13 @@ const ViewQuotationBtDate = () => {
         // ===== TABLE BODY =====
         const body = filteredBookings.map((b, index) => {
             const product = b.productDetails?.[0] || {};
-            const paid = b.paidAmount || 0;
-            const toPay = b.deliveryPendingAmount || 0;
             const total = b.grandTotal || 0;
+
+            const paid =
+                product.topay === "paid" ? total : "";
+
+            const toPay =
+                product.topay === "toPay" ? total : "";
 
             return [
                 index + 1,
@@ -290,6 +309,7 @@ const ViewQuotationBtDate = () => {
                 toPay,
                 total
             ];
+
         });
 
 
@@ -396,10 +416,13 @@ const ViewQuotationBtDate = () => {
     const downloadExcel = () => {
         const data = filteredBookings.map(b => {
             const product = b.productDetails?.[0] || {};
-            const paid = b.paidAmount || 0;
-            const toPay = b.deliveryPendingAmount || 0;
             const total = b.grandTotal || 0;
 
+            const paid =
+                product.topay === "paid" ? total : "";
+
+            const toPay =
+                product.topay === "toPay" ? total : "";
 
             return {
                 "Booking ID": b.bookingId,
@@ -411,12 +434,14 @@ const ViewQuotationBtDate = () => {
                 "Receiver": b.toCustomerName,
                 "Route": `${b.startStationName} - ${b.endStation}`,
                 "Weight": product.weight || 0,
+                "Amount": b.amount || b.productTotal || 0,
                 "Freight": b.freight || 0,
                 "INS / VPP": b.insVppAmount || 0,
                 "Paid": paid,
                 "To Pay": toPay,
                 "Total": total
             };
+
         });
 
         data.push({});
@@ -704,15 +729,16 @@ const ViewQuotationBtDate = () => {
                                     {paginatedBookings.map((booking, index) => {
                                         const product = booking.productDetails?.[0] || {};
                                         const globalIndex = (page - 1) * rowsPerPage + index + 1;
-                                        const paidAmount = booking.paidAmount || 0;
-                                        const biltyAmount = booking.freight || 0;
+                                        const productAmount = booking.amount || booking.productTotal || 0;
+                                        const freightAmount = booking.freight || 0;
+                                        const insVppAmount = booking.insVppAmount || 0;
                                         const totalAmount = booking.grandTotal || 0;
+                                        const topayType = product.topay; // "toPay" | "paid"
                                         const paidText =
-                                            booking.paidAmount > 0 ? `₹${booking.paidAmount}` : "-";
+                                            topayType === "paid" ? `₹${totalAmount}` : "-";
 
                                         const toPayText =
-                                            booking.deliveryPendingAmount > 0 ? `₹${booking.deliveryPendingAmount}` : "-";
-                                        const balanceAmount = booking.deliveryPendingAmount || 0;
+                                            topayType === "toPay" ? `₹${totalAmount}` : "-";
                                         const toPayValue = product.topay === "topay" ? "To Pay" : 0;
 
                                         return (
@@ -770,50 +796,46 @@ const ViewQuotationBtDate = () => {
                                                     {product.weight} kg
                                                 </TableCell>
 
-                                                {/* Amount Details (ONLY multi-line column) */}
+                                                {/* Amount Details */}
                                                 <TableCell>
                                                     <Stack spacing={0.5}>
-                                                        {/* Amount */}
                                                         <Box sx={{ display: 'flex', gap: 1 }}>
-                                                            <Typography variant="caption" sx={{ minWidth: 70 }}>
+                                                            <Typography variant="caption" sx={{ minWidth: 80 }}>
                                                                 Amount:
                                                             </Typography>
-                                                            <Typography color="success.main">
-                                                                ₹{paidAmount}
+                                                            <Typography color="primary.main">
+                                                                ₹{productAmount}
                                                             </Typography>
                                                         </Box>
 
                                                         <Box sx={{ display: 'flex', gap: 1 }}>
-                                                            <Typography variant="caption" sx={{ minWidth: 70 }}>
-                                                                INS/VPP:
-                                                            </Typography>
-                                                            <Typography color="warning.main">
-                                                                ₹{booking.insVppAmount || 0}
-                                                            </Typography>
-                                                        </Box>
-
-                                                        {/* Bilty (Freight) */}
-                                                        <Box sx={{ display: 'flex', gap: 1 }}>
-                                                            <Typography variant="caption" sx={{ minWidth: 70 }}>
-                                                                Bilty:
+                                                            <Typography variant="caption" sx={{ minWidth: 80 }}>
+                                                                Freight:
                                                             </Typography>
                                                             <Typography color="info.main">
-                                                                ₹{biltyAmount}
+                                                                ₹{freightAmount}
                                                             </Typography>
                                                         </Box>
 
-                                                        {/* Balance */}
                                                         <Box sx={{ display: 'flex', gap: 1 }}>
-                                                            <Typography variant="caption" sx={{ minWidth: 70 }}>
+                                                            <Typography variant="caption" sx={{ minWidth: 80 }}>
+                                                                INS / VPP:
+                                                            </Typography>
+                                                            <Typography color="warning.main">
+                                                                ₹{insVppAmount}
+                                                            </Typography>
+                                                        </Box>
+
+                                                        <Box sx={{ display: 'flex', gap: 1 }}>
+                                                            <Typography variant="caption" sx={{ minWidth: 80 }}>
                                                                 Total:
                                                             </Typography>
-                                                            <Typography color="error.main">
-                                                                ₹{balanceAmount}
+                                                            <Typography fontWeight="bold">
+                                                                ₹{totalAmount}
                                                             </Typography>
                                                         </Box>
                                                     </Stack>
                                                 </TableCell>
-
 
                                                 {/* Paid */}
                                                 <TableCell sx={oneLineCell}>

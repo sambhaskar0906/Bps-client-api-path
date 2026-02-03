@@ -10,9 +10,16 @@ import html2canvas from 'html2canvas';
 import CompanyLogo from '../assets/logo2.png';
 import companySignature from '../assets/digital.jpeg';
 import moment from "moment-timezone";
+import WhatsAppIcon from "@mui/icons-material/WhatsApp";
+import { useDispatch } from "react-redux";
+import { sendBookingWhatsappPdf } from "../features/whatsapp/whatsappSlice";
+import { createRoot } from "react-dom/client";
+
 
 const SlipModal = ({ open, handleClose, bookingData }) => {
     const printRef = useRef();
+    const dispatch = useDispatch();
+    const originalRef = useRef();
 
     const loadImageAsBase64 = (src) =>
         new Promise((resolve) => {
@@ -67,16 +74,22 @@ const SlipModal = ({ open, handleClose, bookingData }) => {
     // Bilty Amount fixed 20 रुपये
     const biltyAmount = 20;
 
+    const taxableAmount =
+        Number(bookingData?.freight || 0) +
+        Number(bookingData?.ins_vpp || 0);
+
     // Calculate values from API data
-    const cgstRate = bookingData?.cgst || 0;
-    const sgstRate = bookingData?.sgst || 0;
-    const igstRate = bookingData?.igst || 0;
+    const cgstRate = Number(bookingData?.cgst || 0);
+    const sgstRate = Number(bookingData?.sgst || 0);
+    const igstRate = Number(bookingData?.igst || 0);
 
-    const cgstAmount = (bookingData?.billTotal * cgstRate) / 100;
-    const sgstAmount = (bookingData?.billTotal * sgstRate) / 100;
-    const igstAmount = (bookingData?.billTotal * igstRate) / 100;
+    const cgstAmount = (taxableAmount * cgstRate) / 100;
+    const sgstAmount = (taxableAmount * sgstRate) / 100;
+    const igstAmount = (taxableAmount * igstRate) / 100;
 
-    const totalBeforeRound = bookingData?.billTotal + cgstAmount + sgstAmount + igstAmount;
+    const billTotal = taxableAmount + biltyAmount;
+
+    const totalBeforeRound = billTotal + cgstAmount + sgstAmount + igstAmount;
     const roundedGrandTotal = Math.round(totalBeforeRound);
     const roundOff = (roundedGrandTotal - totalBeforeRound).toFixed(2);
 
@@ -689,6 +702,73 @@ const SlipModal = ({ open, handleClose, bookingData }) => {
 
         </Paper>
     );
+
+    const generatePdfBlob = async () => {
+        // 🔥 TEMP CONTAINER (VISIBLE)
+        const container = document.createElement("div");
+        container.style.position = "fixed";
+        container.style.top = "0";
+        container.style.left = "0";
+        container.style.width = "210mm";
+        container.style.height = "297mm";
+        container.style.background = "#ffffff";
+        container.style.display = "flex";
+        container.style.alignItems = "center";
+        container.style.justifyContent = "center";
+        container.style.zIndex = "-1"; // invisible to user
+        container.style.padding = "8mm";
+
+        document.body.appendChild(container);
+
+        // 🔥 Render React component INSIDE container
+        const root = createRoot(container);
+        root.render(<Invoice copyType="Original" />);
+
+        // wait for render
+        await new Promise((res) => setTimeout(res, 300));
+
+        const canvas = await html2canvas(container, {
+            scale: 1.8,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+        });
+
+        root.unmount();
+        document.body.removeChild(container);
+
+        const imgData = canvas.toDataURL("image/jpeg", 0.75);
+
+        const pdf = new jsPDF("p", "mm", "a4");
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+
+        const imgWidth = pageWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        const yOffset = (pageHeight - imgHeight) / 2;
+
+        pdf.addImage(imgData, "JPEG", 0, yOffset, imgWidth, imgHeight);
+
+        return pdf.output("blob");
+    };
+
+    const handleSendWhatsapp = async () => {
+        try {
+            const pdfBlob = await generatePdfBlob();
+
+            await dispatch(
+                sendBookingWhatsappPdf({
+                    bookingId: bookingData.bookingId,
+                    pdfBlob: pdfBlob,
+                })
+            ).unwrap();
+
+            alert("✅ Bilty sent on WhatsApp");
+        } catch (err) {
+            alert("❌ WhatsApp send failed");
+            console.error(err);
+        }
+    };
 
     const handleDownloadPDF = async () => {
         await loadImageAsBase64(companySignature);
@@ -1659,6 +1739,12 @@ const SlipModal = ({ open, handleClose, bookingData }) => {
                     </Divider>
                     <Invoice copyType="Duplicate" />
                 </Box>
+                <Box
+                    ref={originalRef}
+                    sx={{ position: "absolute", left: "-9999px", top: 0 }}
+                >
+                    <Invoice copyType="Original" />
+                </Box>
                 <Box textAlign="center" mt={2}>
                     <ButtonGroup variant="contained" aria-label="slip actions">
                         <Button
@@ -1684,6 +1770,17 @@ const SlipModal = ({ open, handleClose, bookingData }) => {
                             }}
                         >
                             Print
+                        </Button>
+                        <Button
+                            startIcon={<WhatsAppIcon />}
+                            onClick={handleSendWhatsapp}
+                            sx={{
+                                backgroundColor: "#25D366",
+                                ml: 2,
+                                "&:hover": { backgroundColor: "#1ebe5d" }
+                            }}
+                        >
+                            Send WhatsApp Bilty
                         </Button>
                     </ButtonGroup>
                 </Box>

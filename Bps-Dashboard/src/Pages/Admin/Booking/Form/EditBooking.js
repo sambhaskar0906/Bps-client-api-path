@@ -59,6 +59,7 @@ const initialValues = {
       vppAmount: "",
       toPay: "",
       weight: "",
+      perKg: "",        // ✅
       amount: "",
     },
   ],
@@ -88,41 +89,38 @@ const totalFields = [
 
 const calculateTotals = (values) => {
   const items = values.items || [];
-
-  // Bilty Amount fixed 20 रुपये
   const biltyAmount = 20;
 
-  // Items का total (सिर्फ FREIGHT auto-fill के लिए)
-  const itemTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  // Items total
+  const itemTotal = items.reduce(
+    (sum, item) => sum + Number(item.amount || 0),
+    0
+  );
 
-  // FREIGHT में manually entered value या items का total (अगर empty है)
   const freight = Number(values.freight || itemTotal);
-
   const ins_vpp = Number(values.ins_vpp || 0);
 
-  // ✅ CORRECTED: Bill Total = FREIGHT + INS/VPP + BILTY AMOUNT
-  const billTotal = freight + ins_vpp + biltyAmount;
+  // ✅ GST only on freight
+  const taxableAmount = freight;
 
-  // ✅ CORRECTED GST Calculation (Bill Total पर)
-  const cgstAmount = (billTotal * Number(values.cgst || 0)) / 100;
-  const sgstAmount = (billTotal * Number(values.sgst || 0)) / 100;
-  const igstAmount = (billTotal * Number(values.igst || 0)) / 100;
+  // ❌ bilty & ins_vpp non-taxable
+  const billTotal = freight + biltyAmount + ins_vpp;
 
-  let grandTotal = billTotal + cgstAmount + sgstAmount + igstAmount;
+  const cgst = (taxableAmount * Number(values.cgst || 0)) / 100;
+  const sgst = (taxableAmount * Number(values.sgst || 0)) / 100;
+  const igst = (taxableAmount * Number(values.igst || 0)) / 100;
 
-  // Round Off Calculation
-  const roundedGrandTotal = Math.round(grandTotal);
-  const roundOff = (roundedGrandTotal - grandTotal).toFixed(2);
+  const totalBeforeRound = billTotal + cgst + sgst + igst;
+
+  const rounded = Math.round(totalBeforeRound);
+  const roundOff = (rounded - totalBeforeRound).toFixed(2);
 
   return {
     billTotal: billTotal.toFixed(2),
-    grandTotal: roundedGrandTotal.toFixed(2),
+    grandTotal: rounded.toFixed(2),
     roundOff,
     biltyAmount: biltyAmount.toFixed(2),
     autoFreight: itemTotal.toFixed(2),
-    cgstAmount: cgstAmount.toFixed(2),
-    sgstAmount: sgstAmount.toFixed(2),
-    igstAmount: igstAmount.toFixed(2)
   };
 };
 
@@ -204,6 +202,28 @@ const validationSchema = Yup.object().shape({
     .typeError("Round Off must be a number"),
 });
 
+const parseBackendDate = (dateStr) => {
+  if (!dateStr) return null;
+
+  // Case 1: ISO format (2026-01-27T18:30:00.000Z)
+  if (dateStr.includes("T")) {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  // Case 2: DD-MM-YYYY format (27-01-2026)
+  if (dateStr.includes("-")) {
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      const [dd, mm, yyyy] = parts;
+      return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    }
+  }
+
+  return null;
+};
+
 const EditBooking = () => {
   const [senderCities, setSenderCities] = React.useState([]);
   const [receiverCities, setReceiverCities] = React.useState([]);
@@ -225,14 +245,44 @@ const EditBooking = () => {
     }
   }, [bookingId, dispatch]);
 
+  const EffectSyncPaymentGST = ({ values, setFieldValue }) => {
+    useEffect(() => {
+      const payments = values.items.map(i => i.toPay);
+
+      // toPay → IGST 18%
+      if (payments.includes("toPay")) {
+        setFieldValue("igst", "18");
+        setFieldValue("cgst", "0");
+        setFieldValue("sgst", "0");
+        return;
+      }
+
+      // paid → CGST 9 + SGST 9
+      if (payments.includes("paid")) {
+        setFieldValue("igst", "0");
+        setFieldValue("cgst", "9");
+        setFieldValue("sgst", "9");
+        return;
+      }
+
+      // none
+      setFieldValue("igst", "0");
+      setFieldValue("cgst", "0");
+      setFieldValue("sgst", "0");
+
+    }, [values.items, setFieldValue]);
+
+    return null;
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Formik
         initialValues={{
           ...initialValues,
           ...viewedBooking,
-          bookingDate: viewedBooking?.bookingDate ? new Date(viewedBooking.bookingDate) : new Date(),
-          deliveryDate: viewedBooking?.deliveryDate ? new Date(viewedBooking.deliveryDate) : new Date(),
+          bookingDate: parseBackendDate(viewedBooking?.bookingDate),
+          deliveryDate: parseBackendDate(viewedBooking?.deliveryDate),
           startStation: viewedBooking?.startStation?.stationName || "",
           endStation: viewedBooking?.endStation?.stationName || "",
           biltyAmount: "20",
@@ -241,7 +291,12 @@ const EditBooking = () => {
         validationSchema={validationSchema}
         onSubmit={(values, { setSubmitting }) => {
           setSubmitting(true);
-          dispatch(updateBookingById({ bookingId, data: values }))
+          const payload = {
+            ...values,
+            items: values.items.map(({ perKg, ...rest }) => rest), // remove perKg
+          };
+
+          dispatch(updateBookingById({ bookingId, data: payload }))
             .unwrap()
             .then(() => {
               alert("Booking updated successfully!");
@@ -265,11 +320,13 @@ const EditBooking = () => {
               setSenderCities={setSenderCities}
               setReceiverCities={setReceiverCities}
             />
+
+            <EffectSyncPaymentGST values={values} setFieldValue={setFieldValue} />
+
             <EffectSyncTotals
               values={values}
               setFieldValue={setFieldValue}
             />
-
             <Button
               variant="outlined"
               startIcon={<ArrowBack />}
@@ -325,6 +382,7 @@ const EditBooking = () => {
                     label="Booking Date"
                     value={values.bookingDate}
                     onChange={(val) => setFieldValue("bookingDate", val)}
+                    format="dd-MM-yyyy"
                     renderInput={(params) => (
                       <TextField
                         fullWidth
@@ -340,6 +398,7 @@ const EditBooking = () => {
                     label="Proposed Delivery Date"
                     value={values.deliveryDate}
                     onChange={(val) => setFieldValue("deliveryDate", val)}
+                    format="dd-MM-yyyy"
                     renderInput={(params) => (
                       <TextField
                         fullWidth
@@ -686,23 +745,51 @@ const EditBooking = () => {
                               fullWidth
                               size="small"
                               label="Weight"
-                              name={`items[${index}].weight`}
-                              value={item.weight}
-                              onChange={handleChange}
                               type="number"
+                              value={values.items[index].weight}
+                              onChange={(e) => {
+                                const weight = Number(e.target.value || 0);
+                                const perKg = Number(values.items[index].perKg || 0);
+
+                                setFieldValue(`items[${index}].weight`, e.target.value);
+                                setFieldValue(
+                                  `items[${index}].amount`,
+                                  (weight * perKg).toFixed(2)
+                                );
+                              }}
                             />
                           </Grid>
+
+                          <Grid size={{ xs: 12, md: 1.4 }}>
+                            <TextField
+                              fullWidth
+                              size="small"
+                              label="Per Kg"
+                              type="number"
+                              value={values.items[index].perKg}
+                              onChange={(e) => {
+                                const perKg = Number(e.target.value || 0);
+                                const weight = Number(values.items[index].weight || 0);
+
+                                setFieldValue(`items[${index}].perKg`, e.target.value);
+                                setFieldValue(
+                                  `items[${index}].amount`,
+                                  (weight * perKg).toFixed(2)
+                                );
+                              }}
+                            />
+                          </Grid>
+
                           <Grid size={{ xs: 12, md: 1.4 }}>
                             <TextField
                               fullWidth
                               size="small"
                               label="Amount"
-                              name={`items[${index}].amount`}
-                              value={item.amount}
-                              onChange={handleChange}
-                              type="number"
+                              value={values.items[index].amount}
+                              InputProps={{ readOnly: true }}
                             />
                           </Grid>
+
                           <Grid size={{ xs: 12, md: 1.5 }}>
                             <TextField
                               select
@@ -849,16 +936,18 @@ const EffectSyncTotals = ({ values, setFieldValue }) => {
   useEffect(() => {
     const totals = calculateTotals(values);
 
-    // FREIGHT को auto-fill करें (अगर empty है)
-    if (!values.freight || values.freight === "" || values.freight === "0") {
-      setFieldValue("freight", totals.autoFreight);
-    }
+    const itemTotal = values.items.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0
+    );
 
-    // अन्य totals set करें
+    setFieldValue("freight", totals.autoFreight);
     setFieldValue("billTotal", totals.billTotal);
     setFieldValue("grandTotal", totals.grandTotal);
     setFieldValue("roundOff", totals.roundOff);
     setFieldValue("biltyAmount", totals.biltyAmount);
+
+
   }, [
     values.items,
     values.freight,

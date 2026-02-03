@@ -1,19 +1,34 @@
-import multer from 'multer';
-import path from 'path';
+import multer from "multer";
+import path from "path";
 
-// Define file storage with destination and filename configuration
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, './uploads');  // Save files in the 'uploads' folder
+    cb(null, "./uploads");
   },
   filename: function (req, file, cb) {
-    // Use a unique identifier or timestamp to avoid overwriting files with the same name
-    const timestamp = Date.now();
-    const fileExtension = path.extname(file.originalname);
-    const fileName = `${timestamp}${fileExtension}`;
-    cb(null, fileName);
+    const unique = Date.now() + "-" + Math.round(Math.random() * 1E9);
+    cb(null, unique + path.extname(file.originalname));
   }
 });
 
-// Multer middleware
-export const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 }, });
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/jpg",
+    "image/webp"
+  ];
+
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error("Only PDF & Images allowed"), false);
+  }
+};
+
+export const upload = multer({
+  storage,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB
+  fileFilter
+});

@@ -179,14 +179,14 @@ export const assignDelivery = asyncHandler(async (req, res) => {
 
     if (!booking) continue;
 
-    const alreadyAssigned = await Delivery.findOne({ bookingId });
+    const alreadyAssigned = await Delivery.findOne({ bookingId: booking._id });
     if (alreadyAssigned) continue;
 
     await Booking.updateOne({ bookingId }, { activeDelivery: true });
 
     const deliveryObj = {
       orderId: generateOrderId(),
-      bookingId,
+      bookingId: booking._id,
       deliveryType: "Booking",
       driverId, // ✅ updated
       vehicleModel: vehicleId,
@@ -216,41 +216,31 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     const quotation = await Quotation.findOne({ bookingId: quotationId });
     if (!quotation) continue;
 
-    const alreadyAssigned = await Delivery.findOne({ quotationId });
+    // ✅ FIX
+    const alreadyAssigned = await Delivery.findOne({ quotationId: quotation._id });
     if (alreadyAssigned) continue;
-
-    await Quotation.updateOne({ bookingId: quotationId }, { activeDelivery: true });
 
     const deliveryObj = {
       orderId: generateOrderId(),
-      quotationId,
+      quotationId: quotation._id,   // ✅ ObjectId
       deliveryType: "Quotation",
-      driverId, // ✅ updated
+      driverId,
       vehicleModel: vehicleId,
       status: "Pending",
-      fromName: quotation.senderName || 'N/A',
-      pickup: quotation.startStation?.stationName || quotation.startStationName || 'N/A',
-      toName: quotation.receiverName || 'N/A',
+      fromName: quotation.fromCustomerName || 'N/A',
+      pickup: quotation.startStationName || 'N/A',
+      toName: quotation.toCustomerName || 'N/A',
       drop: quotation.endStation || 'N/A',
       contact: quotation.mobile || 'N/A',
     };
 
-    deliveries.push(deliveryObj);
-
-    responseData.push({
-      ...deliveryObj,
-      sno: responseData.length + 1,
-      orderBy: quotation.createdByRole || 'N/A',
-      date: quotation.quotationDate?.toISOString().slice(0, 10) || 'N/A',
-    });
-
-    // ✅ Update quotation here
     await Quotation.updateOne(
       { bookingId: quotationId },
       { activeDelivery: true, orderId: deliveryObj.orderId }
     );
-  }
 
+    deliveries.push(deliveryObj);
+  }
 
 
   // Handle quotationIds similarly if needed...
@@ -344,14 +334,14 @@ export const finalizeDelivery = asyncHandler(async (req, res) => {
   // Step 2: Mark Booking or Quotation as completed
   if (delivery.deliveryType === "Booking" && delivery.bookingId) {
     await Booking.updateOne(
-      { bookingId: delivery.bookingId },
+      { _id: delivery.bookingId },   // ✅ ObjectId
       { activeDelivery: false, isDelivered: true }
     );
   }
 
   if (delivery.deliveryType === "Quotation" && delivery.quotationId) {
     await Quotation.updateOne(
-      { bookingId: delivery.quotationId },
+      { _id: delivery.quotationId },   // ✅ ObjectId match
       { activeDelivery: false, isDelivered: true }
     );
   }
@@ -445,7 +435,8 @@ export const sendDeliverySuccessByOrderId = async (req, res) => {
 
     // CASE 1: If deliveryType is Booking
     if (delivery.deliveryType === 'Booking') {
-      const booking = await Booking.findOne({ bookingId: delivery.bookingId }).populate('customerId', 'emailId firstName lastName');
+      const booking = await Booking.findById(delivery.bookingId)
+        .populate('customerId', 'emailId firstName lastName');
       if (booking) {
         customer = booking.customerId;
         emailSourceData = {
@@ -458,7 +449,8 @@ export const sendDeliverySuccessByOrderId = async (req, res) => {
 
     // CASE 2: If deliveryType is Quotation
     if (!emailSourceData && delivery.deliveryType === 'Quotation') {
-      const quotation = await Quotation.findOne({ bookingId: delivery.quotationId }).populate('customerId', 'emailId firstName lastName');
+      const quotation = await Quotation.findById(delivery.quotationId)
+        .populate('customerId', 'emailId firstName lastName');
       if (quotation) {
         customer = quotation.customerId;
         emailSourceData = {
@@ -501,27 +493,49 @@ export const countFinalDeliveries = asyncHandler(async (req, res) => {
 });
 
 export const listFinalDeliveries = asyncHandler(async (req, res) => {
-  const deliveries = await Delivery.find({ status: "Final Delivery" }).populate([
-    { path: "vehicleModel", select: "vehicleModel" },
-  ])
-  console.log("d", deliveries);
+  const deliveries = await Delivery.find({ status: "Final Delivery" })
+    .populate([
+      { path: "vehicleModel", select: "vehicleModel" },
+      { path: "bookingId", select: "quotationPdf bookingId" },   // 🔥 booking pdf
+      { path: "quotationId", select: "quotationPdf bookingId" }, // 🔥 quotation pdf
+    ])
+    .lean();
 
   const data = deliveries.map((delivery, i) => ({
     SNo: i + 1,
     orderId: delivery.orderId,
+
+    // ✅ separation
+    deliveryType: delivery.deliveryType,   // Booking | Quotation
+
     fromName: delivery.fromName || "N/A",
     toName: delivery.toName || "N/A",
-    pickup: delivery.pickup,  // Renamed from startStation
-    drop: delivery.drop || "N/A",     // Renamed from endStation
+
+    pickup: delivery.pickup || "N/A",
+    drop: delivery.drop || "N/A",
+
     contact: delivery.contact || "N/A",
+
     driverName: delivery.driverName || "N/A",
+
     vehicle: delivery.vehicleModel
       ? {
         _id: delivery.vehicleModel._id,
         vehicleModel: delivery.vehicleModel.vehicleModel,
       }
-      : "N/A",
+      : null,
+
+    // 📄 PDF auto-detect
+    pdfUrl:
+      delivery.deliveryType === "Booking"
+        ? delivery.bookingId?.quotationPdf || null
+        : delivery.quotationId?.quotationPdf || null,
+
+    bookingRef: delivery.bookingId?.bookingId || null,
+    quotationRef: delivery.quotationId?.bookingId || null,
   }));
 
-  res.status(200).json(new ApiResponse(200, data, "Final delivery list fetched successfully."));
+  res.status(200).json(
+    new ApiResponse(200, data, "Final delivery list fetched successfully.")
+  );
 });

@@ -77,7 +77,7 @@ export const updateByInvoiceNo = createAsyncThunk(
 const initialState = {
     list: [],
     form: {
-        date: dayjs(),
+        date: "",
         invoiceNo: '',
         title: '',
         details: '',
@@ -147,7 +147,7 @@ const expenseSlice = createSlice(
                     state.loading = false;
                     const payload = action.payload;
                     state.form = {
-                        date: payload.date || '',
+                        date: payload.date ? String(payload.date) : '',
                         invoiceNo: payload.invoiceNo || '',
                         title: payload.title || '',
                         details: payload.details || '',
@@ -177,7 +177,7 @@ const expenseSlice = createSlice(
                     }
                     const payload = action.payload;
                     state.form = {
-                        date: payload.date || '',
+                        date: payload.date ? String(payload.date) : '',
                         invoiceNo: payload.invoiceNo || '',
                         title: payload.title || '',
                         details: payload.details || '',

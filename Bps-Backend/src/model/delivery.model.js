@@ -8,8 +8,17 @@ const deliverySchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  bookingId: { type: String },
-  quotationId: { type: String },
+  bookingId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Booking",
+    default: null
+  },
+
+  quotationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Quotation",
+    default: null
+  },
   deliveryType: { type: String, enum: ["Booking", "Quotation"], required: true },
 
   driverId: {

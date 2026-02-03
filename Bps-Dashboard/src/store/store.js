@@ -13,6 +13,8 @@ import ExpenseReducer from '../features/expense/expenseSlice'
 import CustomerLedgerReducer from '../features/customerLedger/customerLedgerSlice'
 import ContactReducer from '../features/contact/contactSlice'
 import leadOptionsReducer from '../features/addOptionsSlice/addOptionsSlice'
+import staffReducer from "../features/staff/staffSlice";
+import whatsappReducer from '../features/whatsapp/whatsappSlice';
 
 export const store = configureStore({
   reducer: {
@@ -30,5 +32,7 @@ export const store = configureStore({
     ledger: CustomerLedgerReducer,
     contact: ContactReducer,
     leadOptions: leadOptionsReducer,
+    staff: staffReducer,
+    whatsapp: whatsappReducer,
   },
 });

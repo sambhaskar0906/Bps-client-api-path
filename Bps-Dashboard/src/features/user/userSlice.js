@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios'
-import { AUTH_API, FILES_BASE_URL } from '../../utils/api';
+import { AUTH_API } from '../../utils/api';
 
 const BASE_URL = AUTH_API;
 
@@ -79,7 +79,7 @@ export const updateUser = createAsyncThunk(
                     }
                 }
             );
-            return response.data.message;
+            return response.data.updatedUser || response.data.message;
         } catch (err) {
             return thunkApi.rejectWithValue(err.response?.data?.message || err.message);
         }
@@ -240,10 +240,10 @@ const initialState = {
         distinct: "",
         state: "",
         city: "",
-        pinCode: "",
+        pincode: "",
         idProof: "",
-        idProofPhoto: null,
         adminProfilePhoto: null,
+        idProofPhoto: null
     },
     status: 'idle',
     error: null,
@@ -262,11 +262,15 @@ const userSlice = createSlice({
         resetForm: (state) => {
             state.form = initialState.form;
         },
-        adduser: (state, action) => {
+        addUser: (state, action) => {
             state.list.push(action.payload);
         },
         setUser: (state, action) => {
-            state.list = action.payload;
+            state.list = Array.isArray(action.payload)
+                ? action.payload
+                : action.payload
+                    ? [action.payload]
+                    : [];
         },
         clearViewedUser: (state) => {
             state.viewedUser = null;
@@ -305,6 +309,7 @@ const userSlice = createSlice({
             })
             .addCase(viewUserById.fulfilled, (state, action) => {
                 state.loading = false;
+                state.viewedUser = action.payload;
                 const payload = action.payload;
                 state.form = {
                     firstName: payload.firstName || '',
@@ -320,12 +325,8 @@ const userSlice = createSlice({
                     idProof: payload.idProof || '',
                     startStation: payload.startStation || '',
                     stationCode: payload.stationCode || '',
-                    idPhoto: payload.idProofPhoto
-                        ? `${FILES_BASE_URL}/${payload.idProofPhoto.replace(/\\/g, '/').replace(/^\/+/g, '')}`
-                        : null,
-                    adminPhoto: payload.adminProfilePhoto
-                        ? `${FILES_BASE_URL}/${payload.adminProfilePhoto.replace(/\\/g, '/').replace(/^\/+/g, '')}`
-                        : null
+                    idPhoto: payload.idProofPhoto || null,
+                    adminPhoto: payload.adminProfilePhoto || null
                 };
 
             })
@@ -366,12 +367,8 @@ const userSlice = createSlice({
                     startStation: payload.startStation || '',
                     pincode: payload.pincode || '',
                     idProof: payload.idProof || '',
-                    idPhoto: payload.idProofPhoto
-                        ? `${FILES_BASE_URL}/${payload.idProofPhoto.replace(/\\/g, '/').replace(/^\/+/g, '')}`
-                        : null,
-                    adminPhoto: payload.adminProfilePhoto
-                        ? `${FILES_BASE_URL}/${payload.adminProfilePhoto.replace(/\\/g, '/').replace(/^\/+/g, '')}`
-                        : null
+                    idPhoto: payload.idProofPhoto || null,
+                    adminPhoto: payload.adminProfilePhoto || null
                 };
             })
             .addCase(updateUser.rejected, (state, action) => {
@@ -383,7 +380,7 @@ const userSlice = createSlice({
                 state.blackCount = action.payload
             })
             .addCase(blacklistedList.fulfilled, (state, action) => {
-                state.loading = true;
+                state.loading = false;
                 state.list = action.payload
             })
             .addCase(deactivatedCount.fulfilled, (state, action) => {
@@ -392,7 +389,11 @@ const userSlice = createSlice({
             })
             .addCase(deactivatedList.fulfilled, (state, action) => {
                 state.loading = true;
-                state.list = action.payload;
+                state.list = Array.isArray(action.payload)
+                    ? action.payload
+                    : action.payload
+                        ? [action.payload]
+                        : [];
             })
             .addCase(adminCount.fulfilled, (state, action) => {
                 state.loading = false;
@@ -400,7 +401,11 @@ const userSlice = createSlice({
             })
             .addCase(adminList.fulfilled, (state, action) => {
                 state.loading = false;
-                state.list = action.payload;
+                state.list = Array.isArray(action.payload)
+                    ? action.payload
+                    : action.payload
+                        ? [action.payload]
+                        : [];
             })
             .addCase(activeSupervisorCount.fulfilled, (state, action) => {
                 state.loading = false;
@@ -408,7 +413,11 @@ const userSlice = createSlice({
             })
             .addCase(activeList.fulfilled, (state, action) => {
                 state.loading = false;
-                state.list = action.payload;
+                state.list = Array.isArray(action.payload)
+                    ? action.payload
+                    : action.payload
+                        ? [action.payload]
+                        : [];
             })
             .addCase(updateStatus.pending, (state) => {
                 state.loading = true;
@@ -419,7 +428,7 @@ const userSlice = createSlice({
                 const updatedUser = action.payload;
                 const index = state.list.findIndex(u => u._id === updatedUser._id);
                 if (index !== -1) {
-                    state.list[index] = updateUser;
+                    state.list[index] = updatedUser;
                 }
             })
             .addCase(updateStatus.rejected, (state, action) => {

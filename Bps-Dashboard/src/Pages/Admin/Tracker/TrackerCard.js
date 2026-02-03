@@ -10,6 +10,7 @@ import {
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import CustomerSearch from "../../../Components/CustomerSearch";
+import { BOOKINGS_API } from "../../../utils/api";
 
 const TrackerCard = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -23,26 +24,29 @@ const TrackerCard = () => {
             setErrorMsg("Please fill in all fields");
             return;
         }
+
         setErrorMsg("");
         setLoading(true);
 
         try {
-            const response = await fetch("https://api.bharatparcel.org/api/v2/bookings/invoice", {
+            const response = await fetch(`${BOOKINGS_API}/invoice`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                },
                 body: JSON.stringify({
-                    customerName: selectedCustomer.name, // ✅ safer than just name
+                    customerName: selectedCustomer.name,
                     fromDate: fromDate.toISOString().split("T")[0],
                     toDate: toDate.toISOString().split("T")[0],
                 }),
             });
 
-            if (response.ok && response.headers.get("content-type").includes("pdf")) {
+            if (response.ok && response.headers.get("content-type")?.includes("pdf")) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `${selectedCustomer.name}_Invoice.pdf`; // ✅ use selectedCustomer
+                a.download = `${selectedCustomer.name}_Invoice.pdf`;
                 document.body.appendChild(a);
                 a.click();
                 a.remove();
